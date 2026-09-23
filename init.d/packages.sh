@@ -2,4 +2,4 @@
 set -euo pipefail
 
 # Basic Tools
-sudo apt install -y man-db curl wget nano zip unzip git tree gh
+sudo apt install -y man-db curl wget nano zip unzip git tree gh jq ripgrep moreutils

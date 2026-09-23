@@ -27,13 +27,13 @@ docker run -it -u root -w /root --entrypoint '["/usr/bin/dumb-init", "/usr/bin/t
 > [!NOTE]  
 > [`/root/init.sh`](src/init.sh) is the packaged bootstrap script.  
 >   
-> Normally, `zsh` is used with `oh-my-zsh`,  
+> Normally, `zsh` is used with `omz`,  
 > but it makes image unnessasarily heavy.  
 >   
 > So initial setup is split into install topics under [`init.d/`](init.d/)  
 > and run by the curl-fetched master script.  
 
-Default install with unminimize, apt HTTPS support, minimal packages, and oh-my-zsh
+Default install with unminimize, apt HTTPS support, minimal packages, and omz
 
 ```bash
 ~/init.sh
@@ -60,13 +60,13 @@ Update the installed init script when a newer git commit is available
 Install only selected topics
 
 ```bash
-~/init.sh install oh-my-tmux python-uv
+~/init.sh install omt python-uv
 ```
 
 Exclude a topic from the default install
 
 ```bash
-~/init.sh --exclude oh-my-zsh
+~/init.sh --exclude omz
 ```
 
 Install SteamCMD and create a `/usr/local/bin/steamcmd` wrapper that runs as the `steam` user

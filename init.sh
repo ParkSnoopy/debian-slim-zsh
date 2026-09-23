@@ -33,16 +33,18 @@ AVAILABLE_TOPICS=(
 	python-uv
 	tldr
 	xtradeb
-	oh-my-zsh
-	javascript-nodejs
-	javascript-bun
+	omz
+	js-node-22
+	js-node-24
+	js-bun
+	golang
 	steamcmd
 	minecraft-fabric
 	minecraft-neoforge
-	oh-my-tmux
+	omt
 )
 
-DEFAULT_TOPICS=(unminimize apt-https packages oh-my-zsh)
+DEFAULT_TOPICS=(unminimize apt-https packages omz)
 SELECTED_TOPICS=()
 EXCLUDED_TOPICS=()
 INSTALL_COMMAND=false
@@ -71,15 +73,15 @@ ${BOLD}Run control${RESET}
   -h, --help                     show this help
 
 ${BOLD}Defaults${RESET}
-  unminimize → apt-https → packages → oh-my-zsh
+  unminimize → apt-https → packages → omz
 
 ${BOLD}Topic order${RESET}
   unminimize → apt-https → packages → rest
 
 ${BOLD}Examples${RESET}
-  init.sh install git-config javascript-bun
+  init.sh install git-config js-bun
   init.sh install steamcmd
-  init.sh install '*' --exclude oh-my-zsh
+  init.sh install '*' --exclude omz
   init.sh update
 
 ${BOLD}Topics${RESET}
@@ -88,6 +90,34 @@ EOF
 	for topic in "${AVAILABLE_TOPICS[@]}"; do
 		printf '  %b•%b %s\n' "$GREEN" "$RESET" "$topic"
 	done
+}
+
+usage_install() {
+	cat <<EOF
+${BOLD}${CYAN}init.sh install${RESET}
+
+${BOLD}Usage${RESET}
+  init.sh install topic ... [options]
+
+${BOLD}Options${RESET}
+  --exclude topic ...            remove topics after selection
+  --dry-run                      preview core install commands only
+  -y                             skip confirmation prompt
+  -h, --help                     show this help
+
+Use '*' to select all available topics.
+EOF
+}
+
+usage_update() {
+	cat <<EOF
+${BOLD}${CYAN}init.sh update${RESET}
+
+${BOLD}Usage${RESET}
+  init.sh update
+
+Update ~/init.sh when a newer commit exists. Confirm before updating ~/.zshenv.
+EOF
 }
 
 say_info() {
@@ -111,9 +141,14 @@ self_update() {
 	local latest_hash
 	local latest_short_hash
 	local next_script
+	local next_zshenv
+	local reply
 	local target_script
 
 	target_script="${INIT_TARGET_SCRIPT:-$HOME/init.sh}"
+	next_script=
+	next_zshenv=
+	trap 'rm -f "$next_script" "$next_zshenv"' RETURN
 
 	say_info "Checking ${GITHUB_REPOSITORY}@${GITHUB_BRANCH}"
 	latest_json="$(curl --proto '=https' --tlsv1.2 -fsSL "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_BRANCH}")"
@@ -127,20 +162,35 @@ self_update() {
 
 	if [ "$latest_short_hash" = "$CURRENT_COMMIT_HASH" ]; then
 		say_success "Already up to date (${CURRENT_COMMIT_HASH})."
-		return 0
+	else
+		say_info "Updating ${CURRENT_COMMIT_HASH} → ${latest_short_hash}"
+		next_script="$(mktemp "${TMPDIR:-/tmp}/init-update.XXXXXX")"
+		curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/init.sh" -o "$next_script"
+		chmod +x "$next_script"
+		sed -i "s/^CURRENT_COMMIT_HASH=\"[0-9a-f]*\"/CURRENT_COMMIT_HASH=\"$latest_short_hash\"/" "$next_script"
+		install -m 755 "$next_script" "$target_script"
+		if [ -d /usr/local/share/zsh/site-functions ] && [ -w /usr/local/share/zsh/site-functions ]; then
+			curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/src/_init.sh" -o /usr/local/share/zsh/site-functions/_init.sh 2>/dev/null || true
+		fi
+		say_success "Updated $target_script to ${latest_short_hash}."
 	fi
 
-	say_info "Updating ${CURRENT_COMMIT_HASH} → ${latest_short_hash}"
-	next_script="$(mktemp "${TMPDIR:-/tmp}/init-update.XXXXXX")"
-	trap 'rm -f "$next_script"' RETURN
-	curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/init.sh" -o "$next_script"
-	chmod +x "$next_script"
-	sed -i "s/^CURRENT_COMMIT_HASH=\"[0-9a-f]*\"/CURRENT_COMMIT_HASH=\"$latest_short_hash\"/" "$next_script"
-	install -m 755 "$next_script" "$target_script"
-	if [ -d /usr/local/share/zsh/site-functions ] && [ -w /usr/local/share/zsh/site-functions ]; then
-		curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/src/_init.sh" -o /usr/local/share/zsh/site-functions/_init.sh 2>/dev/null || true
+	printf 'Update %s/.zshenv? [y/N] ' "$HOME"
+	if ! read -r reply; then
+		reply=
 	fi
-	say_success "Updated $target_script to ${latest_short_hash}."
+
+	case "$reply" in
+		y|Y|yes|YES)
+			next_zshenv="$(mktemp "${TMPDIR:-/tmp}/zshenv-update.XXXXXX")"
+			curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/src/.zshenv" -o "$next_zshenv"
+			install -m 644 "$next_zshenv" "$HOME/.zshenv"
+			say_success "Updated $HOME/.zshenv."
+			;;
+		*)
+			say_info "Skipped $HOME/.zshenv."
+			;;
+	esac
 }
 
 is_available_topic() {
@@ -323,7 +373,7 @@ preview_topic() {
 			printf '%s\n' 'sudo apt update'
 			;;
 		packages)
-			printf '%s\n' 'sudo apt install -y man-db curl wget nano zip unzip git tree gh'
+			printf '%s\n' 'sudo apt install -y man-db curl wget nano zip unzip git tree gh jq ripgrep moreutils'
 			;;
 		git-config)
 			printf '%s\n' 'sudo apt install -y git git-delta git-lfs'
@@ -345,19 +395,28 @@ preview_topic() {
 			printf '%s\n' 'sudo apt install -y software-properties-common'
 			printf '%s\n' 'sudo add-apt-repository -y ppa:xtradeb/apps'
 			;;
-		oh-my-zsh)
+		omz)
 			printf '%s\n' 'sudo apt install -y curl git zsh'
 			printf '%s\n' 'sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended'
 			;;
-		javascript-nodejs)
+		js-node-22)
 			printf '%s\n' 'sudo apt install -y curl'
 			printf '%s\n' 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash'
 			printf '%s\n' 'nvm install 22'
 			printf '%s\n' 'yes | corepack enable pnpm'
 			;;
-		javascript-bun)
+		js-node-24)
+			printf '%s\n' 'sudo apt install -y curl'
+			printf '%s\n' 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash'
+			printf '%s\n' 'nvm install 24'
+			printf '%s\n' 'yes | corepack enable pnpm'
+			;;
+		js-bun)
 			printf '%s\n' 'sudo apt install -y curl unzip'
 			printf '%s\n' 'curl -fsSL https://bun.sh/install | bash'
+			;;
+		golang)
+			printf '%s\n' 'sudo apt install -y golang'
 			;;
 		steamcmd)
 			printf '%s\n' 'use local Unix user steam by default'
@@ -379,7 +438,7 @@ preview_topic() {
 			printf '%s\n' 'sudo apt install -y curl openjdk-25-jdk'
 			printf '%s\n' 'install latest compatible NeoForge; set -Xmx6G; remove run.bat'
 			;;
-		oh-my-tmux)
+		omt)
 			printf '%s\n' 'sudo apt install -y git gnu-which tmux zsh'
 			printf '%s\n' 'git clone --single-branch https://github.com/gpakosz/.tmux.git'
 			;;
@@ -396,6 +455,10 @@ while [ "$#" -gt 0 ]; do
 
 			INSTALL_COMMAND=true
 			shift
+			if [ "${1:-}" = '--help' ] || [ "${1:-}" = '-h' ]; then
+				usage_install
+				exit 0
+			fi
 			if [ "$#" -eq 0 ] || [[ "$1" == -* ]]; then
 				say_error "install requires at least one topic"
 				exit 1
@@ -407,11 +470,28 @@ while [ "$#" -gt 0 ]; do
 			done
 			;;
 		update)
-			self_update
-			exit 0
+			shift
+			case "${1:-}" in
+				'')
+					self_update
+					exit 0
+					;;
+				--help|-h)
+					usage_update
+					exit 0
+					;;
+				*)
+					say_error "update does not accept arguments"
+					exit 1
+					;;
+			esac
 			;;
 		--help|-h)
-			usage
+			if [ "$INSTALL_COMMAND" = true ]; then
+				usage_install
+			else
+				usage
+			fi
 			exit 0
 			;;
 		--list)
