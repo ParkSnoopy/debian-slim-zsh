@@ -97,8 +97,10 @@ The Containerfile copies the complete topic directory into the image.
 
 Remote downloads require an explicit `INIT_BASE_URL` and request `<base>/init.d/<name>.topic`.
 The coordinator downloads each complete topic before executing it and removes its temporary file afterward.
-Remote self-update also requires `INIT_GITHUB_REPOSITORY` and optionally `INIT_GITHUB_BRANCH`.
-No default points to the Ubuntu repository or assumes a published Debian fork exists.
+Self-update defaults to `ParkSnoopy/debian-slim-zsh` on `main`, with raw downloads from the same repository and branch.
+`INIT_GITHUB_REPOSITORY` and `INIT_GITHUB_BRANCH` override those defaults.
+An explicit `INIT_BASE_URL` overrides the raw download location.
+The derived update URL applies only to self-update. It does not change local topic installation into remote execution.
 Self-update checks Bash syntax before replacing the coordinator and asks before replacing the user's shell environment.
 It does not replace the bundled topic directory.
 Remote topic downloads still require `INIT_BASE_URL` on subsequent calls.

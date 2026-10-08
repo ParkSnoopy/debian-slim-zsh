@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BASE_URL="${INIT_BASE_URL:-}"
-GITHUB_REPOSITORY="${INIT_GITHUB_REPOSITORY:-}"
+GITHUB_REPOSITORY="${INIT_GITHUB_REPOSITORY:-ParkSnoopy/debian-slim-zsh}"
 GITHUB_BRANCH="${INIT_GITHUB_BRANCH:-main}"
 CURRENT_COMMIT_HASH="b1ec88e"
 TOPIC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/init.d"
@@ -133,6 +133,7 @@ say_error() {
 }
 
 self_update() (
+	local BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_BRANCH}"
 	local latest_json
 	local latest_hash
 	local latest_short_hash
@@ -140,11 +141,6 @@ self_update() (
 	local next_zshenv
 	local reply
 	local target_script
-
-	if [ "$GITHUB_REPOSITORY" = "" ] || [ "$BASE_URL" = "" ]; then
-		say_error 'Remote update requires INIT_GITHUB_REPOSITORY and INIT_BASE_URL for the Debian fork.'
-		exit 1
-	fi
 
 	target_script="${INIT_TARGET_SCRIPT:-$HOME/init.sh}"
 	next_script=

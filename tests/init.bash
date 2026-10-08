@@ -9,6 +9,7 @@ export HOME="$CHECK_DIR/home" TMPDIR="$CHECK_DIR/tmp" NO_COLOR=1
 export COMMAND_LOG="$CHECK_DIR/commands"
 export CURL_FAIL=false APT_FAIL=false UPDATE_INVALID=false UPDATE_HASH=b1ec88e
 export INIT_BASE_URL= INIT_GITHUB_REPOSITORY=
+unset INIT_GITHUB_BRANCH INIT_TARGET_SCRIPT
 mkdir -p "$HOME" "$TMPDIR"
 touch "$COMMAND_LOG"
 
@@ -115,9 +116,17 @@ run 1 update extra
 run 0 install golang
 [[ "$OUTPUT" == *'Proceed? [y/N]'*'Cancelled.'* ]]
 [ ! -s "$COMMAND_LOG" ]
-run 1 update
-[[ "$OUTPUT" == *'Remote update requires INIT_GITHUB_REPOSITORY and INIT_BASE_URL'* ]]
-[ ! -s "$COMMAND_LOG" ]
+run 0 update
+[[ "$OUTPUT" == *'Checking ParkSnoopy/debian-slim-zsh@main'*'Already up to date'*'Skipped '* ]]
+grep -qx 'curl https://api.github.com/repos/ParkSnoopy/debian-slim-zsh/commits/main' "$COMMAND_LOG"
+INIT_TARGET_SCRIPT="$CHECK_DIR/default-init.sh" UPDATE_HASH=3333333333333333333333333333333333333333 run 0 update
+grep -qx 'curl https://raw.githubusercontent.com/ParkSnoopy/debian-slim-zsh/main/init.sh' "$COMMAND_LOG"
+bash -n "$CHECK_DIR/default-init.sh"
+INIT_GITHUB_REPOSITORY=fixture/other INIT_GITHUB_BRANCH=release run 0 update
+grep -qx 'curl https://api.github.com/repos/fixture/other/commits/release' "$COMMAND_LOG"
+INIT_GITHUB_REPOSITORY=fixture/other INIT_GITHUB_BRANCH=release INIT_TARGET_SCRIPT="$CHECK_DIR/custom-init.sh" UPDATE_HASH=3333333333333333333333333333333333333333 run 0 update
+grep -qx 'curl https://raw.githubusercontent.com/fixture/other/release/init.sh' "$COMMAND_LOG"
+: > "$COMMAND_LOG"
 
 run 0 install golang -y
 [[ "$OUTPUT" == *'Topic complete: golang'* ]]
