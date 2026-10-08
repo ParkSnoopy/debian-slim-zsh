@@ -12,7 +12,7 @@ command -v "$ENGINE" >/dev/null || {
 "$ENGINE" image inspect "$IMAGE" >/dev/null
 CHECK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/container-check.XXXXXX")"
 NAME="debian-slim-zsh-${CHECK_DIR##*.}"
-trap '"$ENGINE" rm -f "$NAME" "$NAME-signal" >/dev/null 2>&1; rm -rf "$CHECK_DIR"' EXIT
+trap '"$ENGINE" rm -f "$NAME" "$NAME-signal" "$NAME-tmux" >/dev/null 2>&1; rm -rf "$CHECK_DIR"' EXIT
 
 "$ENGINE" run --rm --network none --user 0:0 --group-add 1234 "$IMAGE" \
 	/usr/local/bin/as-admin /usr/bin/zsh -lec '
@@ -49,10 +49,28 @@ grep -qx diagnostic "$CHECK_DIR/stderr"
 
 # Allocate a real host PTY and keep the image default CMD unchanged.
 export CONTAINER_ENGINE="$ENGINE" TEST_IMAGE="$IMAGE"
-printf '[[ -o interactive ]] && [[ "$(id -un)" == admin ]] && echo TTY_OK\nexit\n' |
+printf '[[ -o interactive ]] && [[ "$(id -un)" == admin ]] && echo TTY_OK && echo TTY_DUPLEX_OK >&0\nexit\n' |
 	timeout 30 script -qec '"$CONTAINER_ENGINE" run --rm -it --network none --user 0:0 "$TEST_IMAGE"' \
 	"$CHECK_DIR/tty"
 grep -qx $'TTY_OK\r' "$CHECK_DIR/tty"
+grep -qx $'TTY_DUPLEX_OK\r' "$CHECK_DIR/tty"
+
+# Require output from a tmux pane, not merely an echoed input command.
+export TEST_TMUX_CONTAINER="$NAME-tmux"
+{
+	ready=false
+	for attempt in {1..100}; do
+		if "$ENGINE" exec "$NAME-tmux" as-admin tmux has-session 2>/dev/null; then
+			ready=true
+			break
+		fi
+		sleep 0.1
+	done
+	[ "$ready" = true ]
+	printf 'printf TMUX_; echo OUTPUT_OK; sleep 1; exit\n'
+} | timeout 30 script -qec '"$CONTAINER_ENGINE" run --rm -it --name "$TEST_TMUX_CONTAINER" --network none --user 0:0 "$TEST_IMAGE" /usr/local/bin/as-admin /usr/bin/tmux -2u' \
+	"$CHECK_DIR/tmux"
+grep -q TMUX_OUTPUT_OK "$CHECK_DIR/tmux"
 
 "$ENGINE" create --name "$NAME" --user 0:0 "$IMAGE" \
 	/usr/local/bin/as-admin bash -exc '

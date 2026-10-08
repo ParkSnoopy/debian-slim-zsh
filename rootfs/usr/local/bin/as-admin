@@ -4,5 +4,10 @@ set -euo pipefail
 export HOME=/home/admin USER=admin LOGNAME=admin SHELL=/usr/bin/zsh
 export XDG_RUNTIME_DIR=/run/user/1000
 
+# s6 reopens terminal stdin read-only; tmux needs a read-write descriptor.
+if [ -t 0 ]; then
+	exec 0<> /proc/self/fd/0
+fi
+
 # Keep the device groups inherited from the outer container runtime.
 exec setpriv --reuid=1000 --regid=1000 --keep-groups --inh-caps=-all --ambient-caps=-all -- "$@"

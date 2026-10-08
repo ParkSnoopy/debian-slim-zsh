@@ -56,6 +56,8 @@ Container runtime
 - `/init` remains the entrypoint. Do not bypass it with a shell or tmux entrypoint override.
 - The default CMD uses [as-admin](../rootfs/usr/local/bin/as-admin) to set `HOME`, `USER`, `LOGNAME`, `SHELL`, and `XDG_RUNTIME_DIR`.
 - The helper uses `setpriv --keep-groups` to preserve inherited device groups and does not change the working directory.
+- For terminal input, the helper reopens stdin read-write before dropping privileges because s6 supplies a read-only descriptor that can stall tmux output.
+- Nonterminal stdin and separate stdout/stderr streams remain unchanged.
 - An explicit CMD replaces the complete default command. Admin commands must include `as-admin`.
 - Container `exec` also bypasses the default CMD. Reconnection must select `as-admin` explicitly.
 - The [sudo policy](../rootfs/etc/sudoers.d/admin) grants passwordless sudo and preserves supplementary groups.
@@ -261,6 +263,7 @@ bash tests/container.bash debian-slim-zsh:test
 
 The container suite also accepts `CONTAINER_ENGINE=podman` with a Podman-built image.
 It checks admin identity, sudo, inherited groups, runtime permissions, offline startup, a real TTY, output streams, and exit status.
+The TTY checks require writable terminal stdin and actual pane output from the documented `tmux -2u` command.
 It installs `hello` and checks package, configuration, and home persistence across restart of the same container.
 It also installs the Podman topic and checks wrapper ownership, sudo command lookup, and root/non-root version commands before and after restart.
 Those checks do not establish successful nested container creation.
