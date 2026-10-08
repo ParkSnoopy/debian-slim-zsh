@@ -209,7 +209,11 @@ Its noninteractive SIGTERM case explicitly enables CMD signal forwarding.
 Test cleanup removes only disposable test containers and temporary files. An absent engine is a failure, not a skipped pass.
 
 The publication workflow builds from the Containerfile and tests the loaded image before pushing it to `ghcr.io/parksnoopy/debian-slim-zsh`.
-Tags use the workflow's date value. Pull requests do not publish.
+Pushes to `main` publish tags in `YYYYMMDD` format using the `Asia/Seoul` date.
+The full image reference is `ghcr.io/parksnoopy/debian-slim-zsh:{YYYYMMDD}`.
+
+Pull requests run the same build and checks without publication.
+Repeated successful builds on the same date replace that date's tag.
 Do not infer a successful hosted run or publication from local syntax checks.
 
 ### Remaining acceptance gates

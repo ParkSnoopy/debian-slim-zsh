@@ -7,10 +7,11 @@ Based on [ubuntu-slim-zsh](https://github.com/ParkSnoopy/ubuntu-slim-zsh).
 ## Start a workspace
 
 These examples use rootless Podman on Linux.
-From this repository directory, build your image:
+[GitHub Actions](.github/workflows/deploy-image.yaml) builds and publishes the image to GHCR after its checks pass.
+Pull the latest image:
 
 ```bash
-podman build -f Containerfile -t localhost/debian-slim-zsh:local .
+podman pull ghcr.io/parksnoopy/debian-slim-zsh:latest
 ```
 
 Open a shell:
@@ -18,7 +19,7 @@ Open a shell:
 ```bash
 podman run -it --name debian-dev \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
-  localhost/debian-slim-zsh:local
+  ghcr.io/parksnoopy/debian-slim-zsh:latest
 ```
 
 You work as `admin` and can use `sudo` without a password.
@@ -43,7 +44,7 @@ podman run -it --name debian-project \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
   --volume "$PWD:/home/admin/workspace" \
   --workdir /home/admin/workspace \
-  localhost/debian-slim-zsh:local
+  ghcr.io/parksnoopy/debian-slim-zsh:latest
 ```
 
 Changes in `/home/admin/workspace` also change your host files.
@@ -61,7 +62,7 @@ podman run -it --name debian-fuse \
   --runtime crun --group-add keep-groups \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
   --device /dev/fuse:/dev/fuse \
-  localhost/debian-slim-zsh:local
+  ghcr.io/parksnoopy/debian-slim-zsh:latest
 ```
 
 Install the FUSE tools your application needs inside the container.
