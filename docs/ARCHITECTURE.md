@@ -59,8 +59,10 @@ Container runtime
 - An explicit CMD replaces the complete default command. Admin commands must include `as-admin`.
 - Container `exec` also bypasses the default CMD. Reconnection must select `as-admin` explicitly.
 - The [sudo policy](../rootfs/etc/sudoers.d/admin) grants passwordless sudo and preserves supplementary groups.
+- Its explicit `secure_path` places root-owned local command directories before package command directories for admin's sudo calls.
 - The [admin-runtime definition](../rootfs/etc/s6-overlay/s6-rc.d/admin-runtime/) depends on `base` and creates the runtime directory before CMD execution.
 - `S6_BEHAVIOUR_IF_STAGE2_FAILS=2` stops startup when service initialization fails.
+- `S6_KEEP_ENV=1` preserves runtime environment variables through s6 startup for the supervision tree and CMD, including timezone and desktop settings.
 - [policy-rc.d](../rootfs/usr/sbin/policy-rc.d) returns `101` to block supported package service-start requests outside s6 supervision.
 - This policy does not emulate `systemctl`, intercept direct systemd API calls, or establish service readiness.
 
@@ -143,7 +145,7 @@ Image replacement and storage cleanup must be explicit user operations.
 [podman.topic](../init.d/podman.topic) installs Podman, crun, conmon, and fuse-overlayfs through APT.
 It generates and syntax-checks a wrapper, then installs it as root-owned `/usr/local/bin/podman` with mode `0755`.
 The package-owned `/usr/bin/podman` remains unchanged. The topic does not start an engine, pull images, or rewrite Podman configuration files.
-Debian's sudo command path selects the local wrapper before the package executable.
+The image's explicit sudo policy selects the local wrapper before the package executable, independently of Debian's default search order.
 
 The wrapper executes `/usr/bin/podman` directly, preserving argument boundaries, streams, signals, and exit status without recursive command lookup.
 Non-root calls pass through unchanged. Root calls receive these defaults:

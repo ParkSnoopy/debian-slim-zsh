@@ -32,8 +32,12 @@ trap '"$ENGINE" rm -f "$NAME" "$NAME-signal" >/dev/null 2>&1; rm -rf "$CHECK_DIR
 		~/init.sh --dry-run
 	'
 
-"$ENGINE" run --rm --network none --user 0:0 --env TZ=Etc/UTC "$IMAGE" \
-	/usr/local/bin/as-admin /usr/bin/zsh -lec '[[ "$TZ" == Etc/UTC ]]'
+"$ENGINE" run --rm --network none --user 0:0 \
+	--env TZ=Etc/UTC --env 'WORKSPACE_TEST_VALUE=two words' "$IMAGE" \
+	/usr/local/bin/as-admin /usr/bin/zsh -lec '
+		[[ "$TZ" == Etc/UTC ]]
+		[[ "$WORKSPACE_TEST_VALUE" == "two words" ]]
+	'
 
 status=0
 "$ENGINE" run --rm --network none --user 0:0 "$IMAGE" \
