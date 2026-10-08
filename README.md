@@ -1,6 +1,6 @@
 # Debian, with zsh
 
-A small Debian 13 workspace with zsh, tmux, and sudo.
+A small Debian testing workspace with zsh, tmux, and sudo.
 Enter the shell, install the tools you need, and keep your project dependencies inside the container.
 Based on [ubuntu-slim-zsh](https://github.com/ParkSnoopy/ubuntu-slim-zsh).
 

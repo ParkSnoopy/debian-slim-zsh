@@ -16,7 +16,7 @@ trap '"$ENGINE" rm -f "$NAME" "$NAME-signal" >/dev/null 2>&1; rm -rf "$CHECK_DIR
 "$ENGINE" run --rm --network none --user 0:0 --group-add 1234 "$IMAGE" \
 	/usr/local/bin/as-admin /usr/bin/zsh -lec '
 		. /etc/os-release
-		[[ "$ID" == debian && "$VERSION_ID" == 13 ]]
+		[[ "$ID" == debian ]]
 		[[ "$(id -u):$(id -g)" == 1000:1000 ]]
 		[[ " $(id -G) " == *" 1234 "* ]]
 		[[ "$HOME:$USER:$LOGNAME:$SHELL" == /home/admin:admin:admin:/usr/bin/zsh ]]

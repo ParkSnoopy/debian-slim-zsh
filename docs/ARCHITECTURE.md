@@ -34,7 +34,8 @@ The original Ubuntu image used dumb-init, not systemd.
 
 ## Image and process layout
 
-The image uses `debian:13-slim` and the s6-overlay version declared in the Containerfile.
+The image uses `debian:testing-slim` and the s6-overlay version declared in the Containerfile.
+The testing tag follows Debian's rolling testing distribution. Package versions can change between builds.
 The build verifies fixed SHA-256 checksums for the noarch archive and the selected amd64 or arm64 archive.
 Other architectures fail explicitly.
 `DEBIAN_FRONTEND=noninteractive` applies only to build-time package installation.
