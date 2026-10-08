@@ -68,9 +68,62 @@ podman run -it --name debian-fuse \
 Install the FUSE tools your application needs inside the container.
 Device access alone does not guarantee that every FUSE mount works under your host's security policy.
 
-> **Podman inside the workspace is not ready yet.**
-> The image does not include Podman.
-> Passing `/dev/fuse` does not configure nested containers, and installing Podman alone is not sufficient.
+## Run nested Podman
+
+The image does not include Podman. This example installs it inside a separate workspace.
+Run the outer container as your normal host user, without `sudo`.
+Inside the workspace, this example uses `sudo podman`, not admin's rootless Podman engine.
+The host needs rootless Podman, crun, configured subordinate UID/GID ranges, and access to `/dev/fuse`.
+
+> **Use only with trusted code.**
+> This example adds container capabilities and disables security filters to allow nested mounts.
+> It is an unverified example, not a tested nested-container profile.
+
+On the host:
+
+```bash
+podman run -it --name debian-nested \
+  --runtime crun --group-add keep-groups \
+  --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
+  --cap-add SYS_ADMIN --cap-add MKNOD \
+  --security-opt label=disable \
+  --security-opt seccomp=unconfined \
+  --security-opt apparmor=unconfined \
+  --security-opt unmask=ALL \
+  --device /dev/fuse:/dev/fuse \
+  --volume debian-nested-storage:/var/lib/containers \
+  ghcr.io/parksnoopy/debian-slim-zsh:latest
+```
+
+Inside that workspace, install the tools:
+
+```bash
+sudo apt update
+sudo apt install -y podman crun conmon fuse-overlayfs
+```
+
+Then run an inner container:
+
+```bash
+sudo podman --runtime=crun \
+  --cgroup-manager=cgroupfs --events-backend=file \
+  --storage-driver=overlay \
+  --storage-opt=overlay.mount_program=/usr/bin/fuse-overlayfs \
+  run --rm --cgroups=disabled --network=host \
+  --log-driver=k8s-file --security-opt label=disable \
+  --security-opt apparmor=unconfined \
+  docker.io/library/debian:13-slim id
+```
+
+Keep these Podman options when running further inner containers.
+They avoid systemd and journald dependencies and select FUSE storage.
+Inner `--network=host` shares the workspace network, not the physical host network.
+This example does not provide separate inner-container networks or resource limits.
+
+The named volume retains inner images and data without using the host Podman socket.
+Do not reuse it with a different user mapping or storage driver.
+Stop inner containers before exiting the workspace shell.
+Resume this workspace with `podman start -ai debian-nested`.
 
 ## Install your preferred tools
 
