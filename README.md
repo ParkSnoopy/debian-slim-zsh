@@ -51,6 +51,28 @@ Changes in `/home/admin/workspace` also change your host files.
 On SELinux hosts, use `--volume "$PWD:/home/admin/workspace:Z"` for a dedicated project directory.
 Do not relabel your whole home directory.
 
+### Users and file ownership
+
+Run these host commands as your normal user, without `sudo`.
+The two user options have different purposes:
+
+| Option | Meaning |
+| --- | --- |
+| `--userns=keep-id:uid=1000,gid=1000` | Maps your host user and primary group to the container's `admin` account at `1000:1000` |
+| `--user=0:0` | Starts container initialization as container root, not host root |
+
+After initialization, the default shell runs as `admin`.
+For an ordinary shared folder without extra ownership-changing or ID-mapping options:
+
+| Who creates a file in the workspace? | Owner shown on the host |
+| --- | --- |
+| `admin` | Your host user |
+| Container root, including commands run through `sudo` | A subordinate host UID, not host root |
+
+Files created through `sudo` can still have inconvenient ownership.
+Use admin for ordinary project files.
+These rules assume the outer Podman runs rootless. They do not apply unchanged to host `sudo podman`.
+
 ## Allow access to `/dev/fuse`
 
 If your application needs FUSE, pass the device when you create its workspace.
@@ -74,6 +96,11 @@ The image does not include Podman. This example installs it inside a separate wo
 Run the outer container as your normal host user, without `sudo`.
 Inside the workspace, this example uses `sudo podman`, not admin's rootless Podman engine.
 The host needs rootless Podman, crun, configured subordinate UID/GID ranges, and access to `/dev/fuse`.
+
+Guest Podman can also run rootless as `admin`. It does not inherently require `sudo`.
+That mode needs working UID/GID mapping helpers and subordinate ranges that fit within the outer container's mappings.
+The image and example do not configure or verify admin's nested rootless engine.
+`sudo podman` uses a separate engine and storage, not admin's engine with extra permissions.
 
 > **Use only with trusted code.**
 > This example adds container capabilities and disables security filters to allow nested mounts.

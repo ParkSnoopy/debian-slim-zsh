@@ -102,12 +102,24 @@ Rebuild the image or replace the coordinator and topic directory together. Legac
 ## Ownership, devices, and persistent state
 
 The shell account is fixed at UID/GID `1000:1000`.
-Rootless Podman keep-id mapping must map the host caller to that account while `--user=0:0` starts init as container root.
+`--userns=keep-id:uid=1000,gid=1000` maps the rootless host caller and primary group to that container account.
+The host caller does not need numeric UID/GID `1000:1000`.
+`--user=0:0` selects the entrypoint's identity inside the mapping. It does not change the mapping or select host root.
+This explicit user selection overrides keep-id's default process identity so that s6 starts as container root.
+The default CMD then invokes `as-admin`, which switches to UID/GID `1000:1000` before starting zsh.
+
+For ordinary bind mounts without additional ID-mapping or ownership-changing options, files created by admin belong to the host caller.
+Files created by container UID 0 belong to its mapped subordinate host UID, not host UID 0.
+The exact subordinate UID depends on the outer namespace mapping. Do not hardcode it or equate container root with host root.
+Sudo-created project files can therefore have inconvenient host ownership even when the outer engine is rootless.
+Use admin for project writes. Host-root execution, idmapped mounts, and explicit ownership changes require separate analysis.
+
 Use crun's `keep-groups` when host device access depends on supplementary groups.
 Check actual device access through both `as-admin` and sudo, not only numeric group output.
 `no-new-privileges` and `nosuid` can prevent sudo or UID-mapping helpers from working.
 
 The README's `/dev/fuse` example passes a host device. It does not configure nested Podman or guarantee FUSE mounts under every security policy.
+`CAP_MKNOD` permits device-node creation subject to namespace, filesystem, and security restrictions. It does not grant access to the host Podman engine.
 Do not recursively change ownership or permissions on a host workspace.
 Do not automatically recreate containers, overwrite mounted homes, prune images, or reset storage during startup or reconnection.
 
@@ -125,6 +137,20 @@ Image replacement and storage cleanup must be explicit user operations.
 ## Planned extensions: not implemented
 
 ### Nested Podman
+
+Nested Podman can run rootless as admin. Sudo is not an inherent requirement.
+The [README's manual example](../README.md#run-nested-podman) instead runs the guest engine as container root through sudo inside a rootless outer container.
+That example is unverified and does not implement the planned admin-rootless engine below.
+
+Admin's rootless mode requires working `newuidmap` and `newgidmap` helpers and valid guest subordinate UID/GID ranges.
+Those ranges must fit the outer namespace's actual mappings. Installing Podman or copying host range values does not establish valid nested mappings.
+Validate helper privileges, mount restrictions, storage ownership, runtime directories, and non-systemd configuration together before claiming support.
+
+The host, guest root, and guest admin engines have separate container inventories and storage.
+Host `podman ps` lists the outer workspace, not the guest engine's inner containers.
+Guest `sudo podman ps` selects the guest root engine. Guest admin's `podman ps` selects its rootless engine when configured.
+Use the selected engine's required global options consistently.
+The named storage volume does not connect these engines. Host API socket access would be a separate control path that the example does not provide.
 
 ```text
 Host rootless Podman
