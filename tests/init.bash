@@ -15,8 +15,15 @@ touch "$COMMAND_LOG"
 # Controlled command fixtures: no package installation or upstream requests.
 sudo() {
 	echo "sudo $*" >> "$COMMAND_LOG"
-	if [ "$APT_FAIL" = true ] && [ "$*" = 'apt install -y golang' ]; then
-		return 7
+	if [ "$APT_FAIL" = true ]; then
+		case "$*" in
+			'apt install -y golang'|'apt install -y podman crun conmon fuse-overlayfs') return 7 ;;
+		esac
+	fi
+	if [ "$1" = install ]; then
+		local -a args=("$@")
+		[ "${args[-1]}" = /usr/local/bin/podman ] || return 64
+		command install -m 755 "${args[-2]}" "$CHECK_DIR/podman"
 	fi
 }
 
@@ -76,27 +83,28 @@ run 0 --help
 run 0 install --help
 run 0 update --help
 run 0 --list
-[ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc' ]
+[ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc\npodman' ]
 while IFS= read -r topic; do
 	[ -f "$ROOT/init.d/$topic.topic" ]
 	grep -q "'$topic:" "$ROOT/src/_init.sh"
 done <<< "$OUTPUT"
 shopt -s nullglob
 topic_files=("$ROOT"/init.d/*.topic)
-[ "${#topic_files[@]}" -eq 7 ]
+[ "${#topic_files[@]}" -eq 8 ]
 legacy_topic_files=("$ROOT"/init.d/*.sh)
 [ "${#legacy_topic_files[@]}" -eq 0 ]
 run 0 install git-config golang git-config python-uv --exclude python-uv --dry-run
 [[ "$OUTPUT" == *'Preview topic: git-config'*'Preview topic: golang'* ]]
 [[ "$OUTPUT" != *'Preview topic: python-uv'* ]]
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic: git-config')" -eq 1 ]
-run 0 install nanorc python-tldr python-uv oh-my-zsh oh-my-tmux golang git-config --dry-run
-[[ "$OUTPUT" == *'Preview topic: nanorc'*'Preview topic: python-tldr'*'Preview topic: python-uv'*'Preview topic: oh-my-zsh'*'Preview topic: oh-my-tmux'*'Preview topic: golang'*'Preview topic: git-config'* ]]
+run 0 install podman nanorc python-tldr python-uv oh-my-zsh oh-my-tmux golang git-config --dry-run
+[[ "$OUTPUT" == *'Preview topic: podman'*'Preview topic: nanorc'*'Preview topic: python-tldr'*'Preview topic: python-uv'*'Preview topic: oh-my-zsh'*'Preview topic: oh-my-tmux'*'Preview topic: golang'*'Preview topic: git-config'* ]]
+[[ "$OUTPUT" == *'sudo apt install -y podman crun conmon fuse-overlayfs'*'/usr/local/bin/podman'* ]]
 run 0 --dry-run
 [[ "$OUTPUT" == *'Preview topic: oh-my-zsh'* ]]
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 1 ]
 run 0 install '*' --dry-run
-[ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 7 ]
+[ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 8 ]
 run 0 install '*' --exclude '*' --dry-run
 [ "$OUTPUT" = '' ]
 run 1 install unknown --dry-run
@@ -123,11 +131,24 @@ run 0 install python-uv python-tldr -y
 [[ "$OUTPUT" == *'Topic complete: python-uv'*'Topic complete: python-tldr'* ]]
 ! grep -q '^curl ' "$COMMAND_LOG"
 
+APT_FAIL=true run 1 install podman -y
+[ ! -e "$CHECK_DIR/podman" ]
+run 0 install podman -y
+[[ "$OUTPUT" == *'Topic complete: podman'* ]]
+[ -x "$CHECK_DIR/podman" ]
+bash -n "$CHECK_DIR/podman"
+cp "$CHECK_DIR/podman" "$CHECK_DIR/podman-first"
+run 0 install podman -y
+cmp "$CHECK_DIR/podman" "$CHECK_DIR/podman-first"
+
 export INIT_BASE_URL=https://fixture.invalid/debian-slim-zsh
 export INIT_GITHUB_REPOSITORY=fixture/debian-slim-zsh
 run 0 install golang -y
 [[ "$OUTPUT" == *'Topic complete: golang'* ]]
 grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/golang.topic' "$COMMAND_LOG"
+run 0 install podman -y
+cmp "$CHECK_DIR/podman" "$CHECK_DIR/podman-first"
+grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/podman.topic' "$COMMAND_LOG"
 CURL_FAIL=true run 1 install golang -y
 [[ "$OUTPUT" == *'Topic failed: golang'* ]]
 
@@ -154,4 +175,54 @@ done
 shopt -s nullglob
 temporary_files=("$TMPDIR"/*)
 [ "${#temporary_files[@]}" -eq 0 ]
+
+# Capture the generated wrapper's exec boundary without running a real engine.
+id() {
+	[ "$*" = -u ] || return 64
+	echo "$PODMAN_TEST_UID"
+}
+exec() {
+	printf '%s\0' "$@" > "$CHECK_DIR/podman-argv"
+	echo 'fixture stdout'
+	echo 'fixture stderr' >&2
+	exit "$PODMAN_TEST_STATUS"
+}
+export -f id exec
+export PODMAN_TEST_UID=0 PODMAN_TEST_STATUS=0
+global_args=(/usr/bin/podman --runtime=crun --cgroup-manager=cgroupfs --events-backend=file --storage-driver=overlay --storage-opt=overlay.mount_program=/usr/bin/fuse-overlayfs)
+container_args=(--cgroups=disabled --network=host --log-driver=k8s-file --security-opt label=disable --security-opt apparmor=unconfined)
+
+check_podman() {
+	local expected_status="$1" status=0
+	shift
+	: > "$CHECK_DIR/podman-argv"
+	bash "$CHECK_DIR/podman" "$@" > "$CHECK_DIR/podman-stdout" 2> "$CHECK_DIR/podman-stderr" || status=$?
+	[ "$status" -eq "$expected_status" ]
+	if [ "${#expected_args[@]}" -eq 0 ]; then
+		[ ! -s "$CHECK_DIR/podman-argv" ]
+	else
+		cmp "$CHECK_DIR/podman-argv" <(printf '%s\0' "${expected_args[@]}")
+		grep -qx 'fixture stdout' "$CHECK_DIR/podman-stdout"
+		grep -qx 'fixture stderr' "$CHECK_DIR/podman-stderr"
+	fi
+}
+
+payload=(--name 'two words' --network=none --rm=false image sh -c 'echo "$HOME"' '')
+expected_args=("${global_args[@]}" run "${container_args[@]}" --rm "${payload[@]}")
+check_podman 0 run "${payload[@]}"
+check_podman 0 container run "${payload[@]}"
+PODMAN_TEST_STATUS=37 check_podman 37 run "${payload[@]}"
+expected_args=("${global_args[@]}" create "${container_args[@]}" image)
+check_podman 0 create image
+check_podman 0 container create image
+expected_args=("${global_args[@]}" ps --all)
+check_podman 0 ps --all
+expected_args=("${global_args[@]}" --help)
+check_podman 0 --help
+expected_args=()
+check_podman 2 --log-level=debug run image
+grep -q 'Put the subcommand first' "$CHECK_DIR/podman-stderr"
+expected_args=(/usr/bin/podman run "${payload[@]}")
+PODMAN_TEST_UID=1000 check_podman 0 run "${payload[@]}"
+unset -f id exec
 echo 'Installer selection, execution, failure, update, and download guards passed.'

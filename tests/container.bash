@@ -55,10 +55,15 @@ grep -qx $'TTY_OK\r' "$CHECK_DIR/tty"
 		else
 			sudo -n apt-get update
 			sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends hello
+			~/init.sh install podman -y
 			echo preserved > "$HOME/lifecycle-test"
 			echo preserved | sudo -n tee /etc/workspace-lifecycle-test
 			echo INSTALL_OK
 		fi
+		[ "$(stat -c %u:%g:%a /usr/local/bin/podman)" = 0:0:755 ]
+		[ "$(sudo -n bash -c "command -v podman")" = /usr/local/bin/podman ]
+		podman --version
+		sudo -n podman --version
 	' >/dev/null
 ID="$("$ENGINE" inspect --format '{{.Id}}' "$NAME")"
 "$ENGINE" start -a "$NAME" >"$CHECK_DIR/first"

@@ -11,7 +11,8 @@ Keep the base image small and make additional tools optional.
 
 The source provides the Debian/s6 shell foundation.
 Image builds and real lifecycle checks remain acceptance requirements, not implied successes.
-Podman-in-Podman, a host launcher, managed persistent volumes, dynamic service helpers, and desktop forwarding are not implemented.
+The optional Podman topic installs a sudo-engine wrapper, but real nested execution remains unverified.
+Preconfigured admin-rootless Podman, a host launcher, managed persistent volumes, dynamic service helpers, and desktop forwarding are not implemented.
 Host systemd is outside this project's scope.
 The original Ubuntu image used dumb-init, not systemd.
 
@@ -77,7 +78,7 @@ These records do not track later user package installations.
 5. Each selected topic runs in a separate Bash process. Failed topics do not prevent later topics from running.
 6. The coordinator reports all failed topics and returns a nonzero status when any topic fails.
 
-Only `git-config`, `golang`, `oh-my-tmux`, `oh-my-zsh`, `python-uv`, `python-tldr`, and `nanorc` are supported.
+Supported topics are `git-config`, `golang`, `oh-my-tmux`, `oh-my-zsh`, `python-uv`, `python-tldr`, `nanorc`, and `podman`.
 The default selection is `oh-my-zsh`.
 No topic requires another topic to run first. Each topic declares its own package dependencies.
 Keep the coordinator catalogue, previews, completion catalogue, topic files, and tests consistent.
@@ -133,6 +134,29 @@ Do not automatically recreate containers, overwrite mounted homes, prune images,
 A future launcher must separate home, workspace, runtime, and inner-container storage.
 Persisting home does not preserve APT-installed packages.
 Image replacement and storage cleanup must be explicit user operations.
+
+## Optional Podman wrapper
+
+[podman.topic](../init.d/podman.topic) installs Podman, crun, conmon, and fuse-overlayfs through APT.
+It generates and syntax-checks a wrapper, then installs it as root-owned `/usr/local/bin/podman` with mode `0755`.
+The package-owned `/usr/bin/podman` remains unchanged. The topic does not start an engine, pull images, or rewrite Podman configuration files.
+Debian's sudo command path selects the local wrapper before the package executable.
+
+The wrapper executes `/usr/bin/podman` directly, preserving argument boundaries, streams, signals, and exit status without recursive command lookup.
+Non-root calls pass through unchanged. Root calls receive these defaults:
+
+| Scope | Defaults |
+| --- | --- |
+| Every command | `--runtime=crun --cgroup-manager=cgroupfs --events-backend=file --storage-driver=overlay --storage-opt=overlay.mount_program=/usr/bin/fuse-overlayfs` |
+| `run` and `create` | `--cgroups=disabled --network=host --log-driver=k8s-file --security-opt label=disable --security-opt apparmor=unconfined` |
+| `run` only | `--rm` |
+
+The `container run` and `container create` aliases receive the same defaults as their top-level forms.
+Caller arguments follow injected defaults. For example, `run --rm=false` retains the container.
+Root calls require command-first syntax, except top-level help and version flags.
+Leading global options are rejected rather than silently bypassing run defaults. Native syntax remains available through `sudo /usr/bin/podman`.
+The wrapper neither changes outer-container permissions nor configures admin's subordinate mappings.
+It does not add creation options to `build` or other subcommands.
 
 ## Planned extensions: not implemented
 
@@ -218,7 +242,9 @@ actionlint .github/workflows/deploy-image.yaml
 ```
 
 The installer suite uses controlled package and download fixtures in a temporary home.
-It checks the exact seven-topic inventory, `.topic` paths, arbitrary order, exclusions, failures, updates, and download cleanup.
+It checks the exact eight-topic inventory, `.topic` paths, arbitrary order, exclusions, failures, updates, and download cleanup.
+Podman checks redirect installation into the fixture directory and capture the generated wrapper's exec arguments with controlled identity and exit status.
+They cover repeated installation, package failure, root defaults, non-root passthrough, command aliases, quoting, output streams, and error propagation.
 It does not install real packages or contact upstream services.
 
 Build and exercise the image with a working engine:
@@ -231,6 +257,8 @@ bash tests/container.bash debian-slim-zsh:test
 The container suite also accepts `CONTAINER_ENGINE=podman` with a Podman-built image.
 It checks admin identity, sudo, inherited groups, runtime permissions, offline startup, a real TTY, output streams, and exit status.
 It installs `hello` and checks package, configuration, and home persistence across restart of the same container.
+It also installs the Podman topic and checks wrapper ownership, sudo command lookup, and root/non-root version commands before and after restart.
+Those checks do not establish successful nested container creation.
 Its noninteractive SIGTERM case explicitly enables CMD signal forwarding.
 Test cleanup removes only disposable test containers and temporary files. An absent engine is a failure, not a skipped pass.
 

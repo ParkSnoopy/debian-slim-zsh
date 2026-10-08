@@ -92,7 +92,7 @@ Device access alone does not guarantee that every FUSE mount works under your ho
 
 ## Run nested Podman
 
-The image does not include Podman. This example installs it inside a separate workspace.
+Podman is optional. Install the `podman` topic inside a workspace created with the options below.
 Run the outer container as your normal host user, without `sudo`.
 Inside the workspace, this example uses `sudo podman`, not admin's rootless Podman engine.
 The host needs rootless Podman, crun, configured subordinate UID/GID ranges, and access to `/dev/fuse`.
@@ -125,25 +125,24 @@ podman run -it --name debian-nested \
 Inside that workspace, install the tools:
 
 ```bash
-sudo apt update
-sudo apt install -y podman crun conmon fuse-overlayfs
+~/init.sh install podman
 ```
 
 Then run an inner container:
 
 ```bash
-sudo podman --runtime=crun \
-  --cgroup-manager=cgroupfs --events-backend=file \
-  --storage-driver=overlay \
-  --storage-opt=overlay.mount_program=/usr/bin/fuse-overlayfs \
-  run --rm --cgroups=disabled --network=host \
-  --log-driver=k8s-file --security-opt label=disable \
-  --security-opt apparmor=unconfined \
-  docker.io/library/debian:13-slim id
+sudo podman run docker.io/library/debian:13-slim id
 ```
 
-Keep these Podman options when running further inner containers.
-They avoid systemd and journald dependencies and select FUSE storage.
+The installed wrapper supplies the nested runtime, FUSE storage, and non-systemd defaults for `sudo podman`.
+It adds the network, logging, cgroup, and security options to `run` and `create` commands.
+Plain `podman` as admin passes through unchanged and still needs its own rootless setup.
+The wrapper cannot add the outer container's device access or permissions after creation.
+
+`sudo podman run` removes the inner container when it exits. Add `--rm=false` to retain it.
+Put the subcommand first, as in `sudo podman run ...` or `sudo podman ps`.
+Use `sudo /usr/bin/podman` to bypass the wrapper when you need full control of global options.
+
 Inner `--network=host` shares the workspace network, not the physical host network.
 This example does not provide separate inner-container networks or resource limits.
 
@@ -178,6 +177,7 @@ Choose tools in any order:
 | `python-uv` | Python, uv, and ruff |
 | `python-tldr` | Python and the tldr client |
 | `nanorc` | Nano and syntax highlighting |
+| `podman` | Podman, crun, conmon, fuse-overlayfs, and nested defaults for `sudo podman` |
 
 Preview without installing:
 

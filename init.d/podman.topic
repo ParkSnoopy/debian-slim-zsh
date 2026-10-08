@@ -1,0 +1,45 @@
+#!/bin/env bash
+set -euo pipefail
+
+sudo apt install -y podman crun conmon fuse-overlayfs
+
+WRAPPER_PATH="$(mktemp "${TMPDIR:-/tmp}/podman-wrapper.XXXXXX")"
+trap 'rm -f "$WRAPPER_PATH"' EXIT
+cat > "$WRAPPER_PATH" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+if [ "$(id -u)" -ne 0 ]; then
+	exec /usr/bin/podman "$@"
+fi
+
+case "${1:-} ${2:-}" in
+	'container run'|'container create') shift ;;
+esac
+
+case "${1:-}" in
+	run|create)
+		subcommand="$1"
+		shift
+		if [ "$subcommand" = run ]; then
+			set -- --rm "$@"
+		fi
+		set -- "$subcommand" --cgroups=disabled --network=host \
+			--log-driver=k8s-file --security-opt label=disable \
+			--security-opt apparmor=unconfined "$@"
+		;;
+	--help|-h|--version|-v) ;;
+	-*)
+		# ponytail: Require command-first syntax instead of parsing global options.
+		echo 'Put the subcommand first, or use sudo /usr/bin/podman for leading global options.' >&2
+		exit 2
+		;;
+esac
+
+exec /usr/bin/podman --runtime=crun \
+	--cgroup-manager=cgroupfs --events-backend=file \
+	--storage-driver=overlay \
+	--storage-opt=overlay.mount_program=/usr/bin/fuse-overlayfs "$@"
+EOF
+bash -n "$WRAPPER_PATH"
+sudo install -o root -g root -m 755 "$WRAPPER_PATH" /usr/local/bin/podman

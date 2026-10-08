@@ -36,6 +36,7 @@ AVAILABLE_TOPICS=(
 	python-uv
 	python-tldr
 	nanorc
+	podman
 )
 
 DEFAULT_TOPICS=(oh-my-zsh)
@@ -261,6 +262,13 @@ preview_topic() {
 		oh-my-tmux)
 			echo 'sudo apt install -y git gnu-which tmux zsh'
 			echo 'git clone --single-branch https://github.com/gpakosz/.tmux.git'
+			;;
+		podman)
+			echo 'sudo apt install -y podman crun conmon fuse-overlayfs'
+			echo 'sudo install -o root -g root -m 755 <tmp-wrapper> /usr/local/bin/podman'
+			echo 'sudo podman: --runtime=crun --cgroup-manager=cgroupfs --events-backend=file --storage-driver=overlay --storage-opt=overlay.mount_program=/usr/bin/fuse-overlayfs'
+			echo 'run/create defaults: --cgroups=disabled --network=host --log-driver=k8s-file --security-opt label=disable --security-opt apparmor=unconfined'
+			echo 'run also defaults to --rm; non-root podman passes through unchanged'
 			;;
 	esac
 }
