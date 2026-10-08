@@ -13,7 +13,7 @@ sudo apt update
 sudo apt install -y curl ca-certificates
 
 if [ ! -s "$INIT_SCRIPT" ]; then
-	curl --proto '=https' --tlsv1.2 -sSf "$INIT_SCRIPT_URL" -o "$INIT_SCRIPT"
+	curl --proto '=https' --tlsv1.2 -fsSL "$INIT_SCRIPT_URL" -o "$INIT_SCRIPT"
 	chmod +x "$INIT_SCRIPT"
 fi
 

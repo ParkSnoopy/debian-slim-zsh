@@ -31,7 +31,7 @@ NEOFORGE_VERSION="$(printf '%s\n' "$METADATA" |
 	sed -n 's/.*<version>\([^<]*\)<\/version>.*/\1/p' |
 	awk -v prefix="$VERSION_PREFIX." 'index($0, prefix) == 1 {version=$0} END {print version}')"
 
-if [ -z "$NEOFORGE_VERSION" ]; then
+if [ "$NEOFORGE_VERSION" = "" ]; then
 	echo "No NeoForge release found for Minecraft $MINECRAFT_VERSION." >&2
 	exit 1
 fi

@@ -92,3 +92,24 @@ Install every available topic without confirmation
 ```bash
 ~/init.sh install '*' -y
 ```
+
+## Installer structure
+
+`init.sh` parses arguments, applies defaults and exclusions, and orders the
+selected topics before either previewing or installing them. Dry runs return
+before confirmation, downloads, or package changes. Shared membership and
+append helpers handle both selection and exclusion without recursive dispatch.
+Topic failures remain aggregated after the installation loop.
+
+`src/init.sh` is the image's thin bootstrap. Topic scripts remain under
+`init.d/` and use direct command sequences. Upstream shell installers are
+downloaded completely before execution, with temporary files removed on exit.
+Self-update validates the downloaded Bash script before replacement and still
+requires confirmation before replacing `.zshenv`.
+
+## Development checks
+
+`bash tests/init.bash` exercises the CLI with controlled download and package
+command fixtures in a temporary home; it does not install packages or contact
+upstream services. Run `bash -n` and `shellharden --check` on `init.sh`,
+`src/init.sh`, each `init.d/*.sh` script, and `tests/init.bash` individually.

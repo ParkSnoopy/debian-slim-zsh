@@ -6,7 +6,7 @@ GITHUB_REPOSITORY="${INIT_GITHUB_REPOSITORY:-ParkSnoopy/ubuntu-slim-zsh}"
 GITHUB_BRANCH="${INIT_GITHUB_BRANCH:-main}"
 CURRENT_COMMIT_HASH="b1ec88e"
 
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+if [ -t 1 ] && [ "${NO_COLOR:-}" = "" ]; then
 	BOLD=$'\033[1m'
 	DIM=$'\033[2m'
 	CYAN=$'\033[36m'
@@ -88,7 +88,7 @@ ${BOLD}Topics${RESET}
 EOF
 	local topic
 	for topic in "${AVAILABLE_TOPICS[@]}"; do
-		printf '  %b•%b %s\n' "$GREEN" "$RESET" "$topic"
+		echo "  ${GREEN}•${RESET} $topic"
 	done
 }
 
@@ -121,22 +121,23 @@ EOF
 }
 
 say_info() {
-	printf '\n%b==>%b %s\n' "$CYAN" "$RESET" "$1"
+	echo
+	echo "${CYAN}==>${RESET} $1"
 }
 
 say_success() {
-	printf '%b✓%b %s\n' "$GREEN" "$RESET" "$1"
+	echo "${GREEN}✓${RESET} $1"
 }
 
 say_warn() {
-	printf '%b!%b %s\n' "$YELLOW" "$RESET" "$1" >&2
+	echo "${YELLOW}!${RESET} $1" >&2
 }
 
 say_error() {
-	printf '%b✗%b %s\n' "$RED" "$RESET" "$1" >&2
+	echo "${RED}✗${RESET} $1" >&2
 }
 
-self_update() {
+self_update() (
 	local latest_json
 	local latest_hash
 	local latest_short_hash
@@ -148,25 +149,28 @@ self_update() {
 	target_script="${INIT_TARGET_SCRIPT:-$HOME/init.sh}"
 	next_script=
 	next_zshenv=
-	trap 'rm -f "$next_script" "$next_zshenv"' RETURN
+	trap 'rm -f "$next_script" "$next_zshenv"' EXIT
 
 	say_info "Checking ${GITHUB_REPOSITORY}@${GITHUB_BRANCH}"
 	latest_json="$(curl --proto '=https' --tlsv1.2 -fsSL "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_BRANCH}")"
 	latest_hash="$(printf '%s\n' "$latest_json" | sed -n 's/^[[:space:]]*"sha": "\([0-9a-f]*\)",$/\1/p' | head -n 1)"
 	latest_short_hash="${latest_hash:0:7}"
 
-	if [ -z "$latest_short_hash" ]; then
+	if [ "$latest_short_hash" = "" ]; then
 		say_error "Could not read latest commit hash."
 		exit 1
 	fi
 
 	if [ "$latest_short_hash" = "$CURRENT_COMMIT_HASH" ]; then
 		say_success "Already up to date (${CURRENT_COMMIT_HASH})."
-	else
+	fi
+
+	if [ "$latest_short_hash" != "$CURRENT_COMMIT_HASH" ]; then
 		say_info "Updating ${CURRENT_COMMIT_HASH} → ${latest_short_hash}"
 		next_script="$(mktemp "${TMPDIR:-/tmp}/init-update.XXXXXX")"
 		curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/init.sh" -o "$next_script"
 		chmod +x "$next_script"
+		bash -n "$next_script"
 		sed -i "s/^CURRENT_COMMIT_HASH=\"[0-9a-f]*\"/CURRENT_COMMIT_HASH=\"$latest_short_hash\"/" "$next_script"
 		install -m 755 "$next_script" "$target_script"
 		if [ -d /usr/local/share/zsh/site-functions ] && [ -w /usr/local/share/zsh/site-functions ]; then
@@ -182,180 +186,47 @@ self_update() {
 
 	case "$reply" in
 		y|Y|yes|YES)
-			next_zshenv="$(mktemp "${TMPDIR:-/tmp}/zshenv-update.XXXXXX")"
-			curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/src/.zshenv" -o "$next_zshenv"
-			install -m 644 "$next_zshenv" "$HOME/.zshenv"
-			say_success "Updated $HOME/.zshenv."
 			;;
 		*)
 			say_info "Skipped $HOME/.zshenv."
+			return 0
 			;;
 	esac
-}
+	next_zshenv="$(mktemp "${TMPDIR:-/tmp}/zshenv-update.XXXXXX")"
+	curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/src/.zshenv" -o "$next_zshenv"
+	install -m 644 "$next_zshenv" "$HOME/.zshenv"
+	say_success "Updated $HOME/.zshenv."
+)
 
-is_available_topic() {
+contains_topic() {
 	local topic="$1"
 	local available_topic
+	shift
 
-	for available_topic in "${AVAILABLE_TOPICS[@]}"; do
-		if [ "$topic" = "$available_topic" ]; then
-			return 0
-		fi
+	for available_topic in "$@"; do
+		[ "$topic" = "$available_topic" ] || continue
+		return 0
 	done
 
 	return 1
 }
 
-is_selected_topic() {
-	local topic="$1"
-	local selected_topic
-
-	for selected_topic in "${SELECTED_TOPICS[@]}"; do
-		if [ "$topic" = "$selected_topic" ]; then
-			return 0
-		fi
-	done
-
-	return 1
-}
-
-is_excluded_topic() {
-	local topic="$1"
-	local excluded_topic
-
-	for excluded_topic in "${EXCLUDED_TOPICS[@]}"; do
-		if [ "$topic" = "$excluded_topic" ]; then
-			return 0
-		fi
-	done
-
-	return 1
-}
-
-append_selected_topic() {
-	local topic="$1"
+append_topics() {
+	local -n topics="$1"
+	local topic="$2"
+	local -a requested_topics=("$topic")
 
 	if [ "$topic" = '*' ]; then
-		append_all_available_topics
-		return 0
+		requested_topics=("${AVAILABLE_TOPICS[@]}")
 	fi
 
-	if ! is_available_topic "$topic"; then
-		say_error "Unknown topic: $topic"
-		exit 1
-	fi
-
-	if is_selected_topic "$topic"; then
-		return 0
-	fi
-
-	SELECTED_TOPICS+=("$topic")
-}
-
-append_all_available_topics() {
-	local topic
-
-	for topic in "${AVAILABLE_TOPICS[@]}"; do
-		append_selected_topic "$topic"
-	done
-}
-
-append_excluded_topic() {
-	local topic="$1"
-
-	if [ "$topic" = '*' ]; then
-		append_all_excluded_topics
-		return 0
-	fi
-
-	if ! is_available_topic "$topic"; then
-		say_error "Unknown topic: $topic"
-		exit 1
-	fi
-
-	if is_excluded_topic "$topic"; then
-		return 0
-	fi
-
-	EXCLUDED_TOPICS+=("$topic")
-}
-
-append_all_excluded_topics() {
-	local topic
-
-	for topic in "${AVAILABLE_TOPICS[@]}"; do
-		append_excluded_topic "$topic"
-	done
-}
-
-append_topic_if_selected() {
-	local topic="$1"
-
-	if is_selected_topic "$topic"; then
-		ORDERED_TOPICS+=("$topic")
-	fi
-}
-
-normalize_topic_order() {
-	local topic
-	local selected_topic
-
-	ORDERED_TOPICS=()
-	append_topic_if_selected unminimize
-	append_topic_if_selected apt-https
-	append_topic_if_selected packages
-
-	for topic in "${SELECTED_TOPICS[@]}"; do
-		case "$topic" in
-			unminimize|apt-https|packages)
-				continue
-				;;
-		esac
-
-		for selected_topic in "${ORDERED_TOPICS[@]}"; do
-			if [ "$topic" = "$selected_topic" ]; then
-				continue 2
-			fi
-		done
-
-		ORDERED_TOPICS+=("$topic")
-	done
-
-	SELECTED_TOPICS=("${ORDERED_TOPICS[@]}")
-}
-
-remove_excluded_topics() {
-	local topic
-
-	ORDERED_TOPICS=()
-
-	for topic in "${SELECTED_TOPICS[@]}"; do
-		if is_excluded_topic "$topic"; then
-			continue
+	for topic in "${requested_topics[@]}"; do
+		if ! contains_topic "$topic" "${AVAILABLE_TOPICS[@]}"; then
+			say_error "Unknown topic: $topic"
+			exit 1
 		fi
-
-		ORDERED_TOPICS+=("$topic")
-	done
-
-	SELECTED_TOPICS=("${ORDERED_TOPICS[@]}")
-}
-
-apply_default_topics() {
-	local topic
-
-	if [ "$INSTALL_COMMAND" = true ]; then
-		return 0
-	fi
-
-	ORDERED_TOPICS=("${SELECTED_TOPICS[@]}")
-	SELECTED_TOPICS=()
-
-	for topic in "${DEFAULT_TOPICS[@]}"; do
-		append_selected_topic "$topic"
-	done
-
-	for topic in "${ORDERED_TOPICS[@]}"; do
-		append_selected_topic "$topic"
+		contains_topic "$topic" "${topics[@]}" && continue
+		topics+=("$topic")
 	done
 }
 
@@ -364,83 +235,82 @@ preview_topic() {
 
 	case "$topic" in
 		unminimize)
-			printf '%s\n' 'yes | sudo unminimize'
-			printf '%s\n' 'sudo apt install -y man-db'
+			echo 'yes | sudo unminimize'
+			echo 'sudo apt install -y man-db'
 			;;
 		apt-https)
-			printf '%s\n' 'sudo apt install -y ca-certificates apt-transport-https'
-			printf '%s\n' "sudo sed -i 's|http://|https://|g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources"
-			printf '%s\n' 'sudo apt update'
+			echo 'sudo apt install -y ca-certificates apt-transport-https'
+			echo "sudo sed -i 's|http://|https://|g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources"
+			echo 'sudo apt update'
 			;;
 		packages)
-			printf '%s\n' 'sudo apt install -y man-db curl wget nano zip unzip git tree gh jq ripgrep moreutils'
+			echo 'sudo apt install -y man-db curl wget nano zip unzip git tree gh jq ripgrep moreutils'
 			;;
 		git-config)
-			printf '%s\n' 'sudo apt install -y git git-delta git-lfs'
-			printf '%s\n' 'git config --global diff.lfs.textconv cat'
+			echo 'sudo apt install -y git git-delta git-lfs'
+			echo 'git config --global diff.lfs.textconv cat'
 			;;
 		nanorc)
-			printf '%s\n' 'sudo apt install -y curl unzip wget'
-			printf '%s\n' 'curl https://raw.githubusercontent.com/scopatz/nanorc/master/install.sh | sh'
+			echo 'sudo apt install -y curl unzip wget'
+			echo 'curl -fsSL https://raw.githubusercontent.com/scopatz/nanorc/master/install.sh -o <tmp-installer>'
+			echo 'sh <tmp-installer>'
 			;;
 		python-uv)
-			printf '%s\n' 'sudo apt install -y python3 python-is-python3 python3-pip'
-			printf '%s\n' 'python -m pip install --break-system-packages uv ruff'
+			echo 'sudo apt install -y python3 python-is-python3 python3-pip'
+			echo 'python -m pip install --break-system-packages uv ruff'
 			;;
 		tldr)
-			printf '%s\n' 'sudo apt install -y python3 python3-pip'
-			printf '%s\n' 'python3 -m pip install --break-system-packages tldr'
+			echo 'sudo apt install -y python3 python3-pip'
+			echo 'python3 -m pip install --break-system-packages tldr'
 			;;
 		xtradeb)
-			printf '%s\n' 'sudo apt install -y software-properties-common'
-			printf '%s\n' 'sudo add-apt-repository -y ppa:xtradeb/apps'
+			echo 'sudo apt install -y software-properties-common'
+			echo 'sudo add-apt-repository -y ppa:xtradeb/apps'
 			;;
 		omz)
-			printf '%s\n' 'sudo apt install -y curl git zsh'
-			printf '%s\n' 'sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended'
+			echo 'sudo apt install -y curl git zsh'
+			echo 'curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh -o <tmp-installer>'
+			echo 'sh <tmp-installer> --unattended'
 			;;
-		js-node-22)
-			printf '%s\n' 'sudo apt install -y curl'
-			printf '%s\n' 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash'
-			printf '%s\n' 'nvm install 22'
-			printf '%s\n' 'yes | corepack enable pnpm'
-			;;
-		js-node-24)
-			printf '%s\n' 'sudo apt install -y curl'
-			printf '%s\n' 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash'
-			printf '%s\n' 'nvm install 24'
-			printf '%s\n' 'yes | corepack enable pnpm'
+		js-node-22|js-node-24)
+			echo 'sudo apt install -y curl'
+			echo 'curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh -o <tmp-installer>'
+			echo 'bash <tmp-installer>'
+			echo '. "$HOME/.nvm/nvm.sh"'
+			echo "nvm install ${topic##*-}"
+			echo 'corepack enable pnpm'
 			;;
 		js-bun)
-			printf '%s\n' 'sudo apt install -y curl unzip'
-			printf '%s\n' 'curl -fsSL https://bun.sh/install | bash'
+			echo 'sudo apt install -y curl unzip'
+			echo 'curl -fsSL https://bun.sh/install -o <tmp-installer>'
+			echo 'bash <tmp-installer>'
 			;;
 		golang)
-			printf '%s\n' 'sudo apt install -y golang'
+			echo 'sudo apt install -y golang'
 			;;
 		steamcmd)
-			printf '%s\n' 'use local Unix user steam by default'
-			printf '%s\n' 'reject root as SteamCMD runtime user'
-			printf '%s\n' 'sudo apt install -y ca-certificates curl sudo tar lib32gcc-s1 lib32stdc++6'
-			printf '%s\n' 'sudo useradd -m -s /bin/bash <user>  # if missing'
-			printf '%s\n' 'curl -fsSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz -o <tmp-archive>'
-			printf '%s\n' 'sudo -u <user> tar -xzf <tmp-archive> -C /home/<user>/steamcmd'
-			printf '%s\n' 'sudo -u <user> /home/<user>/steamcmd/steamcmd.sh +quit'
-			printf '%s\n' 'write /usr/local/bin/steamcmd wrapper that runs steamcmd.sh as <user>'
+			echo 'use local Unix user steam by default'
+			echo 'reject root as SteamCMD runtime user'
+			echo 'sudo apt install -y ca-certificates curl sudo tar lib32gcc-s1 lib32stdc++6'
+			echo 'sudo useradd -m -s /bin/bash <user>  # if missing'
+			echo 'curl -fsSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz -o <tmp-archive>'
+			echo 'sudo -u <user> tar -xzf <tmp-archive> -C /home/<user>/steamcmd'
+			echo 'sudo -u <user> /home/<user>/steamcmd/steamcmd.sh +quit'
+			echo 'write /usr/local/bin/steamcmd wrapper that runs steamcmd.sh as <user>'
 			;;
 		minecraft-fabric)
-			printf '%s\n' 'prompt: Minecraft version, install directory'
-			printf '%s\n' 'sudo apt install -y curl openjdk-25-jdk'
-			printf '%s\n' 'download latest compatible Fabric server jar; write run.sh (-Xmx6G)'
+			echo 'prompt: Minecraft version, install directory'
+			echo 'sudo apt install -y curl openjdk-25-jdk'
+			echo 'download latest compatible Fabric server jar; write run.sh (-Xmx6G)'
 			;;
 		minecraft-neoforge)
-			printf '%s\n' 'prompt: Minecraft version, install directory'
-			printf '%s\n' 'sudo apt install -y curl openjdk-25-jdk'
-			printf '%s\n' 'install latest compatible NeoForge; set -Xmx6G; remove run.bat'
+			echo 'prompt: Minecraft version, install directory'
+			echo 'sudo apt install -y curl openjdk-25-jdk'
+			echo 'install latest compatible NeoForge; set -Xmx6G; remove run.bat'
 			;;
 		omt)
-			printf '%s\n' 'sudo apt install -y git gnu-which tmux zsh'
-			printf '%s\n' 'git clone --single-branch https://github.com/gpakosz/.tmux.git'
+			echo 'sudo apt install -y git gnu-which tmux zsh'
+			echo 'git clone --single-branch https://github.com/gpakosz/.tmux.git'
 			;;
 	esac
 }
@@ -465,7 +335,7 @@ while [ "$#" -gt 0 ]; do
 			fi
 
 			while [ "$#" -gt 0 ] && [[ "$1" != -* ]]; do
-				append_selected_topic "$1"
+				append_topics SELECTED_TOPICS "$1"
 				shift
 			done
 			;;
@@ -495,7 +365,9 @@ while [ "$#" -gt 0 ]; do
 			exit 0
 			;;
 		--list)
-			printf '%s\n' "${AVAILABLE_TOPICS[@]}"
+			for topic in "${AVAILABLE_TOPICS[@]}"; do
+				echo "$topic"
+			done
 			exit 0
 			;;
 		--dry-run)
@@ -514,7 +386,7 @@ while [ "$#" -gt 0 ]; do
 			fi
 
 			while [ "$#" -gt 0 ] && [[ "$1" != --* ]]; do
-				append_excluded_topic "$1"
+				append_topics EXCLUDED_TOPICS "$1"
 				shift
 			done
 			;;
@@ -530,9 +402,22 @@ while [ "$#" -gt 0 ]; do
 	esac
 done
 
-apply_default_topics
-normalize_topic_order
-remove_excluded_topics
+if [ "$INSTALL_COMMAND" = false ]; then
+	ORDERED_TOPICS=("${SELECTED_TOPICS[@]}")
+	SELECTED_TOPICS=()
+	for topic in "${DEFAULT_TOPICS[@]}" "${ORDERED_TOPICS[@]}"; do
+		append_topics SELECTED_TOPICS "$topic"
+	done
+fi
+
+ORDERED_TOPICS=()
+for topic in unminimize apt-https packages "${SELECTED_TOPICS[@]}"; do
+	contains_topic "$topic" "${SELECTED_TOPICS[@]}" || continue
+	contains_topic "$topic" "${EXCLUDED_TOPICS[@]}" && continue
+	contains_topic "$topic" "${ORDERED_TOPICS[@]}" && continue
+	ORDERED_TOPICS+=("$topic")
+done
+SELECTED_TOPICS=("${ORDERED_TOPICS[@]}")
 
 confirm_install() {
 	local reply
@@ -559,54 +444,51 @@ run_topic() {
 	local topic_script
 	local status
 
-	topic_script="$(mktemp "${TMPDIR:-/tmp}/init-topic-$topic.XXXXXX")"
+	topic_script="$(mktemp "${TMPDIR:-/tmp}/init-topic-$topic.XXXXXX")" || return 1
 
-	if ! curl --proto '=https' --tlsv1.2 -sSf "$BASE_URL/init.d/$topic.sh" -o "$topic_script"; then
+	if ! curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/init.d/$topic.sh" -o "$topic_script"; then
 		rm -f "$topic_script"
 		return 1
 	fi
 
-	chmod +x "$topic_script"
-
-	if bash "$topic_script"; then
-		status=0
-	else
-		status=$?
-	fi
+	status=0
+	bash "$topic_script" || status=$?
 
 	rm -f "$topic_script"
 	return "$status"
 }
 
-if [ "$DRY_RUN" = false ] && [ "$ASSUME_YES" = false ]; then
+if [ "$DRY_RUN" = true ]; then
+	if [ "${#SELECTED_TOPICS[@]}" -gt 0 ]; then
+		say_info "Preview package index update"
+		echo 'sudo apt update'
+	fi
+	for topic in "${SELECTED_TOPICS[@]}"; do
+		say_info "Preview topic: $topic"
+		preview_topic "$topic"
+	done
+	exit 0
+fi
+
+if [ "$ASSUME_YES" = false ]; then
 	confirm_install
 fi
 
 FAILED_TOPICS=()
 
 if [ "${#SELECTED_TOPICS[@]}" -gt 0 ]; then
-	if [ "$DRY_RUN" = true ]; then
-		say_info "Preview package index update"
-		printf '%s\n' 'sudo apt update'
-	else
-		say_info "Updating package index"
-		sudo apt update
-	fi
+	say_info "Updating package index"
+	sudo apt update
 fi
 
 for topic in "${SELECTED_TOPICS[@]}"; do
-	if [ "$DRY_RUN" = true ]; then
-		say_info "Preview topic: $topic"
-		preview_topic "$topic"
-	else
-		say_info "Installing topic: $topic"
-		if ! run_topic "$topic"; then
-			FAILED_TOPICS+=("$topic")
-			say_error "Topic failed: $topic"
-		else
-			say_success "Topic complete: $topic"
-		fi
+	say_info "Installing topic: $topic"
+	if run_topic "$topic"; then
+		say_success "Topic complete: $topic"
+		continue
 	fi
+	FAILED_TOPICS+=("$topic")
+	say_error "Topic failed: $topic"
 done
 
 if [ "${#FAILED_TOPICS[@]}" -gt 0 ]; then
@@ -615,8 +497,5 @@ if [ "${#FAILED_TOPICS[@]}" -gt 0 ]; then
 	exit 1
 fi
 
-if [ "$DRY_RUN" = false ]; then
-	# Post comment
-	echo
-	say_success "Restart container to take effect."
-fi
+echo
+say_success "Restart container to take effect."
