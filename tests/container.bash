@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+trap 'echo "Container check failed at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 ENGINE="${CONTAINER_ENGINE:-docker}"
 IMAGE="${1:?Specify the image to test}"
@@ -50,7 +51,7 @@ printf '[[ -o interactive ]] && [[ "$(id -un)" == admin ]] && echo TTY_OK\nexit\
 grep -qx $'TTY_OK\r' "$CHECK_DIR/tty"
 
 "$ENGINE" create --name "$NAME" --user 0:0 "$IMAGE" \
-	/usr/local/bin/as-admin bash -ec '
+	/usr/local/bin/as-admin bash -exc '
 		if [ -f /etc/workspace-lifecycle-test ]; then
 			hello >/dev/null
 			[ "$(cat "$HOME/lifecycle-test")" = preserved ]
@@ -70,10 +71,10 @@ grep -qx $'TTY_OK\r' "$CHECK_DIR/tty"
 		sudo -n podman --version
 	' >/dev/null
 ID="$("$ENGINE" inspect --format '{{.Id}}' "$NAME")"
-"$ENGINE" start -a "$NAME" >"$CHECK_DIR/first"
+"$ENGINE" start -a "$NAME" | tee "$CHECK_DIR/first"
 [ "$("$ENGINE" inspect --format '{{.State.ExitCode}}' "$NAME")" -eq 0 ]
 grep -qx INSTALL_OK "$CHECK_DIR/first"
-"$ENGINE" start -a "$NAME" >"$CHECK_DIR/restart"
+"$ENGINE" start -a "$NAME" | tee "$CHECK_DIR/restart"
 [ "$("$ENGINE" inspect --format '{{.State.ExitCode}}' "$NAME")" -eq 0 ]
 grep -qx RESTART_OK "$CHECK_DIR/restart"
 [ "$("$ENGINE" inspect --format '{{.Id}}' "$NAME")" = "$ID" ]

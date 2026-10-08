@@ -64,7 +64,23 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.DATE_TAG }}
           labels: ${{ steps.meta.outputs.labels }}
 
+      - name: bash - Test Nested Podman
+        timeout-minutes: 10
+        env:
+          TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.DATE_TAG }}
+        run: |
+          # Privileged only for this disposable nested-engine smoke test.
+          docker run --rm --privileged --user 0:0 "$TEST_IMAGE" \
+            /usr/local/bin/as-admin /usr/bin/zsh -lexc '
+              ~/init.sh install podman -y
+              [[ "$(sudo -n bash -c "command -v podman")" == /usr/local/bin/podman ]]
+              output="$(sudo -n podman run docker.io/library/hello-world:latest)"
+              printf "%s\n" "$output"
+              [[ "$output" == *"Hello from Docker!"* ]]
+            '
+
       - name: bash - Test Container Lifecycle
+        if: ${{ !cancelled() && steps.push.outcome == 'success' }}
         env:
           TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.DATE_TAG }}
         run: bash tests/container.bash "$TEST_IMAGE"

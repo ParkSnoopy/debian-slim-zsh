@@ -262,10 +262,15 @@ It checks admin identity, sudo, inherited groups, runtime permissions, offline s
 It installs `hello` and checks package, configuration, and home persistence across restart of the same container.
 It also installs the Podman topic and checks wrapper ownership, sudo command lookup, and root/non-root version commands before and after restart.
 Those checks do not establish successful nested container creation.
+Lifecycle installation and restart checks print their output and shell trace to expose failures before cleanup removes the containers.
 Its noninteractive SIGTERM case explicitly enables CMD signal forwarding.
 Test cleanup removes only disposable test containers and temporary files. An absent engine is a failure, not a skipped pass.
 
 The publication workflow builds from the Containerfile and tests the loaded image before pushing it to `ghcr.io/parksnoopy/debian-slim-zsh`.
+Its separate nested smoke test installs the Podman topic and runs `hello-world` through the installed `sudo podman` wrapper.
+The test requires a successful exit and the expected greeting. It uses a disposable privileged outer Docker container without a host engine socket.
+That test does not verify the README's restricted rootless outer-container configuration.
+Lifecycle tests still run after a nested smoke-test failure. Either failure blocks publication.
 Pushes to `main` publish tags in `YYYYMMDD` format using the `Asia/Seoul` date.
 The full image reference is `ghcr.io/parksnoopy/debian-slim-zsh:{YYYYMMDD}`.
 
