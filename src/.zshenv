@@ -26,7 +26,7 @@
 #export WAYLAND_DISPLAY="wayland-0"
 
 # Environment
-export TZ="${TZ:-Asia/Shanghai}"
+export TZ="${TZ:-Asia/Seoul}"
 export LANG="${LANG:-en_US.UTF-8}"
 typeset -U path PATH
 path=("$HOME/.local/bin" $path)

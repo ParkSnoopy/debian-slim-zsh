@@ -3,7 +3,6 @@ FROM debian:testing-slim
 ARG S6_OVERLAY_VERSION=3.2.3.2
 
 ENV LANG=en_US.UTF-8 \
-	TZ=Asia/Shanghai \
 	S6_BEHAVIOUR_IF_STAGE2_FAILS=2
 
 USER root
@@ -16,8 +15,6 @@ RUN chmod 755 /usr/sbin/policy-rc.d /usr/local/bin/as-admin && \
 		ca-certificates curl locales procps sudo tmux tzdata util-linux xz-utils zsh && \
 	echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && \
 	locale-gen && \
-	ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime && \
-	echo "$TZ" > /etc/timezone && \
 	rm -rf /var/lib/apt/lists/*
 
 RUN set -eu; \

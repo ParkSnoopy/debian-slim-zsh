@@ -17,6 +17,7 @@ trap '"$ENGINE" rm -f "$NAME" "$NAME-signal" >/dev/null 2>&1; rm -rf "$CHECK_DIR
 	/usr/local/bin/as-admin /usr/bin/zsh -lec '
 		. /etc/os-release
 		[[ "$ID" == debian ]]
+		[[ "$TZ" == Asia/Seoul ]]
 		[[ "$(id -u):$(id -g)" == 1000:1000 ]]
 		[[ " $(id -G) " == *" 1234 "* ]]
 		[[ "$HOME:$USER:$LOGNAME:$SHELL" == /home/admin:admin:admin:/usr/bin/zsh ]]
@@ -29,6 +30,9 @@ trap '"$ENGINE" rm -f "$NAME" "$NAME-signal" >/dev/null 2>&1; rm -rf "$CHECK_DIR
 		~/init.sh --help
 		~/init.sh --dry-run
 	'
+
+"$ENGINE" run --rm --network none --user 0:0 --env TZ=Etc/UTC "$IMAGE" \
+	/usr/local/bin/as-admin /usr/bin/zsh -lec '[[ "$TZ" == Etc/UTC ]]'
 
 status=0
 "$ENGINE" run --rm --network none --user 0:0 "$IMAGE" \
