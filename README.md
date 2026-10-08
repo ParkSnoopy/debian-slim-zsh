@@ -14,7 +14,81 @@ Pull the latest image:
 podman pull ghcr.io/parksnoopy/debian-slim-zsh:latest
 ```
 
-Open a shell:
+### Full desktop and nested-container workspace
+
+Run this from your host project directory, as your normal user without `sudo`.
+It opens tmux with project files, persistent home and Podman storage, desktop sockets, GPU/audio devices, TUN, and FUSE access.
+
+The host needs crun, configured rootless UID/GID mappings, and permission to access each device.
+This example assumes a Wayland desktop with PipeWire and its PulseAudio-compatible socket.
+`XDG_RUNTIME_DIR` must point to your host session directory.
+`WAYLAND_DISPLAY` selects its Wayland socket, defaulting to `wayland-0`.
+Remove unavailable device or socket mounts and their corresponding environment options before running the command.
+For example, many hosts do not have `/dev/accel`.
+
+> **Use only with trusted code.**
+> This example disables several isolation controls and exposes host devices and desktop services.
+> Read-only socket mounts still permit communication with those services.
+> This complete rootless configuration is not yet runtime-verified.
+
+```bash
+podman run -it \
+  --hostname ai-workspace \
+  --name ai-workspace-v2 \
+  --runtime crun \
+  --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
+  --group-add keep-groups \
+  --workdir /home/admin/host \
+  --volume ai-workspace-v2-home:/home/admin \
+  --volume "$PWD:/home/admin/host" \
+  --volume ai-workspace-v2-containers:/var/lib/containers \
+  --mount "type=bind,src=${XDG_RUNTIME_DIR:?Set XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY:-wayland-0},dst=/run/user/1000/wayland-0,ro=true" \
+  --mount "type=bind,src=${XDG_RUNTIME_DIR}/pipewire-0,dst=/run/user/1000/pipewire-0,ro=true" \
+  --mount "type=bind,src=${XDG_RUNTIME_DIR}/pulse/native,dst=/run/user/1000/pulse/native,ro=true" \
+  --env WAYLAND_DISPLAY=wayland-0 \
+  --env GDK_BACKEND=wayland \
+  --env QT_QPA_PLATFORM=wayland \
+  --env PIPEWIRE_REMOTE=pipewire-0 \
+  --env PULSE_SERVER=unix:/run/user/1000/pulse/native \
+  --device /dev/dri \
+  --device /dev/accel \
+  --device /dev/snd \
+  --device /dev/net/tun \
+  --device /dev/fuse \
+  --cap-add NET_ADMIN \
+  --cap-add SYS_ADMIN \
+  --cap-add MKNOD \
+  --security-opt label=disable \
+  --security-opt seccomp=unconfined \
+  --security-opt apparmor=unconfined \
+  --security-opt unmask=ALL \
+  ghcr.io/parksnoopy/debian-slim-zsh:latest \
+  /usr/local/bin/as-admin /usr/bin/tmux -2u new-session -A -s workspace
+```
+
+Keep the image's entrypoint: s6 initializes the container before `as-admin` starts tmux.
+Do not replace it with `dumb-init`.
+The project uses `/home/admin/host`, not `/root/host`, because the interactive account is `admin`.
+This command disables SELinux labeling, so it does not also request `:z` or `:Z` relabeling.
+
+Device and socket access does not install GPU drivers, GUI libraries, audio clients, or VPN tools.
+`NET_ADMIN` applies inside the container's network namespace, not the physical host network.
+For nested containers, [install the Podman topic and use its sudo wrapper](#run-nested-podman).
+The command does not mount the host Podman socket.
+
+Exit the last tmux session to stop the workspace.
+Detaching the original tmux client also ends the container command.
+Detach Podman with `Ctrl-p`, `Ctrl-q` instead to leave it running.
+Attach to a running workspace with `podman attach ai-workspace-v2`.
+Resume a stopped workspace with `podman start -ai ai-workspace-v2`.
+
+Installed packages remain in this container until you remove it.
+The named volumes retain home files and nested Podman storage even after container removal.
+Reuse those volumes only with the same user mapping and storage configuration.
+
+## Minimal bare container
+
+Open a shell without shared folders, desktop sockets, extra devices, or nested-container permissions:
 
 ```bash
 podman run -it --name debian-dev \
@@ -199,16 +273,18 @@ Open a new shell after changing your shell configuration.
 While the workspace is running:
 
 ```bash
-podman exec -it debian-dev as-admin zsh -l
+podman exec -it ai-workspace-v2 as-admin zsh -l
 ```
 
 For tmux:
 
 ```bash
-podman exec -it debian-dev as-admin tmux -2u
+podman exec -it ai-workspace-v2 as-admin tmux -2u attach-session -t workspace
 ```
 
-Keep the original workspace shell open while using these extra terminals.
-Exiting that original shell stops the container, including tmux.
+These commands target the full workspace. Substitute `debian-dev` for the minimal example.
+The tmux attach command requires the full example's existing `workspace` session.
+Keep the original workspace process running while using these extra terminals.
+Exiting the original shell or last tmux session stops the container.
 
 For project structure and contributor checks, see [Architecture](docs/ARCHITECTURE.md).
