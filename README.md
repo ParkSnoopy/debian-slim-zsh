@@ -33,15 +33,15 @@ For example, many hosts do not have `/dev/accel`.
 
 ```bash
 podman run -it \
-  --hostname ai-workspace \
-  --name ai-workspace-v2 \
+  --hostname debian-workspace \
+  --name debian-workspace \
   --runtime crun \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
   --group-add keep-groups \
   --workdir /home/admin/host \
-  --volume ai-workspace-v2-home:/home/admin \
+  --volume debian-workspace-home:/home/admin \
   --volume "$PWD:/home/admin/host" \
-  --volume ai-workspace-v2-containers:/var/lib/containers \
+  --volume debian-workspace-storage:/var/lib/containers \
   --mount "type=bind,src=${XDG_RUNTIME_DIR:?Set XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY:-wayland-0},dst=/run/user/1000/wayland-0,ro=true" \
   --mount "type=bind,src=${XDG_RUNTIME_DIR}/pipewire-0,dst=/run/user/1000/pipewire-0,ro=true" \
   --mount "type=bind,src=${XDG_RUNTIME_DIR}/pulse/native,dst=/run/user/1000/pulse/native,ro=true" \
@@ -66,21 +66,15 @@ podman run -it \
   /usr/local/bin/as-admin /usr/bin/tmux -2u new-session -A -s workspace
 ```
 
-Keep the image's entrypoint: s6 initializes the container before `as-admin` starts tmux.
-Do not replace it with `dumb-init`.
-The project uses `/home/admin/host`, not `/root/host`, because the interactive account is `admin`.
-This command disables SELinux labeling, so it does not also request `:z` or `:Z` relabeling.
-
 Device and socket access does not install GPU drivers, GUI libraries, audio clients, or VPN tools.
 `NET_ADMIN` applies inside the container's network namespace, not the physical host network.
 For nested containers, [install the Podman topic and use its sudo wrapper](#run-nested-podman).
-The command does not mount the host Podman socket.
 
 Exit the last tmux session to stop the workspace.
 Detaching the original tmux client also ends the container command.
 Detach Podman with `Ctrl-p`, `Ctrl-q` instead to leave it running.
-Attach to a running workspace with `podman attach ai-workspace-v2`.
-Resume a stopped workspace with `podman start -ai ai-workspace-v2`.
+Attach to a running workspace with `podman attach debian-workspace`.
+Resume a stopped workspace with `podman start -ai debian-workspace`.
 
 Installed packages remain in this container until you remove it.
 The named volumes retain home files and nested Podman storage even after container removal.
@@ -91,7 +85,7 @@ Reuse those volumes only with the same user mapping and storage configuration.
 Open a shell without shared folders, desktop sockets, extra devices, or nested-container permissions:
 
 ```bash
-podman run -it --name debian-dev \
+podman run -it --hostname debian-dev --name debian-dev \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
   ghcr.io/parksnoopy/debian-slim-zsh:latest
 ```
@@ -114,7 +108,7 @@ The examples do not use `--rm`.
 Run this from the host project folder you want to work on:
 
 ```bash
-podman run -it --name debian-project \
+podman run -it --hostname debian-project --name debian-project \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
   --volume "$PWD:/home/admin/workspace" \
   --workdir /home/admin/workspace \
@@ -154,7 +148,7 @@ The host must provide `/dev/fuse`, and your host user must have permission to ac
 This example also requires `crun` on the host:
 
 ```bash
-podman run -it --name debian-fuse \
+podman run -it --hostname debian-fuse --name debian-fuse \
   --runtime crun --group-add keep-groups \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
   --device /dev/fuse:/dev/fuse \
@@ -183,7 +177,7 @@ The image and example do not configure or verify admin's nested rootless engine.
 On the host:
 
 ```bash
-podman run -it --name debian-nested \
+podman run -it --hostname debian-nested --name debian-nested \
   --runtime crun --group-add keep-groups \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
   --cap-add SYS_ADMIN --cap-add MKNOD \
@@ -273,13 +267,13 @@ Open a new shell after changing your shell configuration.
 While the workspace is running:
 
 ```bash
-podman exec -it ai-workspace-v2 as-admin zsh -l
+podman exec -it debian-workspace as-admin zsh -l
 ```
 
 For tmux:
 
 ```bash
-podman exec -it ai-workspace-v2 as-admin tmux -2u attach-session -t workspace
+podman exec -it debian-workspace as-admin tmux -2u attach-session -t workspace
 ```
 
 These commands target the full workspace. Substitute `debian-dev` for the minimal example.
