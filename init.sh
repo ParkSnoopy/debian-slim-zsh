@@ -389,13 +389,13 @@ run_topic() {
 	local status
 
 	if [ "$BASE_URL" = "" ]; then
-		bash "$TOPIC_DIR/$topic.sh"
+		bash "$TOPIC_DIR/$topic.topic"
 		return $?
 	fi
 
 	topic_script="$(mktemp "${TMPDIR:-/tmp}/init-topic-$topic.XXXXXX")" || return 1
 
-	if ! curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/init.d/$topic.sh" -o "$topic_script"; then
+	if ! curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/init.d/$topic.topic" -o "$topic_script"; then
 		rm -f "$topic_script"
 		return 1
 	fi

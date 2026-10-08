@@ -46,7 +46,7 @@ curl() {
 			echo '  "fixture": true'
 			echo '}'
 			;;
-		*/init.d/*.sh) cp "$ROOT/init.d/${url##*/}" "$output" ;;
+		*/init.d/*.topic) cp "$ROOT/init.d/${url##*/}" "$output" ;;
 		*/src/.zshenv) cp "$ROOT/src/.zshenv" "$output" ;;
 		*/src/_init.sh) return 23 ;;
 		*/init.sh)
@@ -78,11 +78,14 @@ run 0 update --help
 run 0 --list
 [ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc' ]
 while IFS= read -r topic; do
-	[ -f "$ROOT/init.d/$topic.sh" ]
+	[ -f "$ROOT/init.d/$topic.topic" ]
 	grep -q "'$topic:" "$ROOT/src/_init.sh"
 done <<< "$OUTPUT"
-topic_files=("$ROOT"/init.d/*.sh)
+shopt -s nullglob
+topic_files=("$ROOT"/init.d/*.topic)
 [ "${#topic_files[@]}" -eq 7 ]
+legacy_topic_files=("$ROOT"/init.d/*.sh)
+[ "${#legacy_topic_files[@]}" -eq 0 ]
 run 0 install git-config golang git-config python-uv --exclude python-uv --dry-run
 [[ "$OUTPUT" == *'Preview topic: git-config'*'Preview topic: golang'* ]]
 [[ "$OUTPUT" != *'Preview topic: python-uv'* ]]
@@ -124,6 +127,7 @@ export INIT_BASE_URL=https://fixture.invalid/debian-slim-zsh
 export INIT_GITHUB_REPOSITORY=fixture/debian-slim-zsh
 run 0 install golang -y
 [[ "$OUTPUT" == *'Topic complete: golang'* ]]
+grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/golang.topic' "$COMMAND_LOG"
 CURL_FAIL=true run 1 install golang -y
 [[ "$OUTPUT" == *'Topic failed: golang'* ]]
 
@@ -136,13 +140,15 @@ UPDATE_HASH=1111111111111111111111111111111111111111 run 0 update
 [ -x "$HOME/init.sh" ]
 bash -n "$HOME/init.sh"
 cmp "$HOME/init.sh" <(sed 's/^CURRENT_COMMIT_HASH="[0-9a-f]*"/CURRENT_COMMIT_HASH="1111111"/' "$ROOT/init.sh")
+OUTPUT="$(bash "$HOME/init.sh" install golang -y 2>&1)"
+[[ "$OUTPUT" == *'Topic complete: golang'* ]]
 UPDATE_INVALID=true UPDATE_HASH=2222222222222222222222222222222222222222 run 2 update
 cmp "$HOME/init.sh" <(sed 's/^CURRENT_COMMIT_HASH="[0-9a-f]*"/CURRENT_COMMIT_HASH="1111111"/' "$ROOT/init.sh")
 
 CURL_FAIL=true
 for topic in nanorc oh-my-zsh; do
 	status=0
-	bash "$ROOT/init.d/$topic.sh" >/dev/null 2>&1 || status=$?
+	bash "$ROOT/init.d/$topic.topic" >/dev/null 2>&1 || status=$?
 	[ "$status" -eq 23 ]
 done
 shopt -s nullglob
