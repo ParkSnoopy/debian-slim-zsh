@@ -1,0 +1,7 @@
+.git
+.hermes
+.env
+.env.*
+plan.md
+README.md
+tests

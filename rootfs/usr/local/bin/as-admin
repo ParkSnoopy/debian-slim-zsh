@@ -1,0 +1,8 @@
+#!/bin/bash
+set -euo pipefail
+
+export HOME=/home/admin USER=admin LOGNAME=admin SHELL=/usr/bin/zsh
+export XDG_RUNTIME_DIR=/run/user/1000
+
+# Keep the device groups inherited from the outer container runtime.
+exec setpriv --reuid=1000 --regid=1000 --keep-groups --inh-caps=-all --ambient-caps=-all -- "$@"

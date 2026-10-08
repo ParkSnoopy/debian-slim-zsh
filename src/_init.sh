@@ -6,23 +6,13 @@ _init_sh() {
 
 	local -a topics
 	topics=(
-		'unminimize:Revert Ubuntu minimal to full system with man pages'
-		'apt-https:Switch APT repositories to HTTPS'
-		'packages:Install basic CLI tools (curl, wget, git, gh, etc.)'
 		'git-config:Configure Git with delta and LFS'
-		'nanorc:Install syntax highlighting for Nano'
-		'python-uv:Install Python 3, uv, and ruff'
-		'tldr:Install tldr client'
-		'xtradeb:Add xtradeb/apps PPA repository'
-		'omz:Install Oh My Zsh'
-		'js-node-22:Install Node.js 22 via NVM and enable pnpm'
-		'js-node-24:Install Node.js 24 via NVM and enable pnpm'
-		'js-bun:Install Bun runtime'
 		'golang:Install Go toolchain'
-		'steamcmd:Install SteamCMD dedicated server client'
-		'minecraft-fabric:Install Minecraft Fabric server'
-		'minecraft-neoforge:Install Minecraft NeoForge server'
-		'omt:Install Oh My Tmux configuration'
+		'oh-my-tmux:Install Oh My Tmux configuration'
+		'oh-my-zsh:Install Oh My Zsh'
+		'python-uv:Install Python 3, uv, and ruff'
+		'python-tldr:Install tldr client'
+		'nanorc:Install syntax highlighting for Nano'
 		'\*:All available topics'
 	)
 

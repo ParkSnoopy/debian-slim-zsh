@@ -1,14 +1,16 @@
 name: Create and Publish a Docker Image
 
-# Configures this workflow to run every time a change is pushed to the branch called `release`.
+# Build and test pull requests. Publish only pushes to main.
 on:
   push:
+    branches: ['main']
+  pull_request:
     branches: ['main']
 
 # Defines two custom environment variables for the workflow. These are used for the Container registry domain, and a name for the Docker image that this workflow builds.
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: parksnoopy/ubuntu-slim-zsh
+  IMAGE_NAME: parksnoopy/debian-slim-zsh
 
 # There is a single job in this workflow. It's configured to run on the latest available version of Ubuntu.
 jobs:
@@ -24,6 +26,9 @@ jobs:
       - name: actions/checkout@v6 - Check Out Repository
         uses: actions/checkout@v6
 
+      - name: bash - Test Installer
+        run: bash tests/init.bash
+
       - name: bash - Set Image Tag
         id: tag
         run: |
@@ -31,6 +36,7 @@ jobs:
 
       # Uses the `docker/login-action` action to log in to the Container registry registry using the account and password that will publish the packages. Once published, the packages are scoped to the account defined here.
       - name: docker/login-action@v4 - Log in to the Container Registry
+        if: github.event_name == 'push'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -44,14 +50,27 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
-      # This step uses the `docker/build-push-action` action to build the image, based on your repository's `Dockerfile`. If the build succeeds, it pushes the image to GitHub Packages.
+      # Build locally so runtime tests gate publication of this exact image.
       # It uses the `context` parameter to define the build's context as the set of files located in the specified path. For more information, see [Usage](https://github.com/docker/build-push-action#usage) in the README of the `docker/build-push-action` repository.
       # It uses the `tags` and `labels` parameters to tag and label the image with the output from the "meta" step.
-      - name: docker/build-push-action@v7 - Build and Push Docker Image
+      - name: docker/build-push-action@v7 - Build Docker Image
         id: push
         uses: docker/build-push-action@v7
         with:
           context: .
-          push: true
+          file: Containerfile
+          load: true
+          push: false
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.DATE_TAG }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: bash - Test Container Lifecycle
+        env:
+          TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.DATE_TAG }}
+        run: bash tests/container.bash "$TEST_IMAGE"
+
+      - name: bash - Publish Tested Image
+        if: github.event_name == 'push'
+        env:
+          TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.DATE_TAG }}
+        run: docker push "$TEST_IMAGE"

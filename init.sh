@@ -1,10 +1,14 @@
 #!/bin/env bash
 set -euo pipefail
 
-BASE_URL="${INIT_BASE_URL:-https://raw.githubusercontent.com/ParkSnoopy/ubuntu-slim-zsh/refs/heads/main}"
-GITHUB_REPOSITORY="${INIT_GITHUB_REPOSITORY:-ParkSnoopy/ubuntu-slim-zsh}"
+BASE_URL="${INIT_BASE_URL:-}"
+GITHUB_REPOSITORY="${INIT_GITHUB_REPOSITORY:-}"
 GITHUB_BRANCH="${INIT_GITHUB_BRANCH:-main}"
 CURRENT_COMMIT_HASH="b1ec88e"
+TOPIC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/init.d"
+if [ ! -d "$TOPIC_DIR" ]; then
+	TOPIC_DIR=/usr/local/share/debian-slim-zsh/init.d
+fi
 
 if [ -t 1 ] && [ "${NO_COLOR:-}" = "" ]; then
 	BOLD=$'\033[1m'
@@ -25,26 +29,16 @@ else
 fi
 
 AVAILABLE_TOPICS=(
-	unminimize
-	apt-https
-	packages
 	git-config
-	nanorc
-	python-uv
-	tldr
-	xtradeb
-	omz
-	js-node-22
-	js-node-24
-	js-bun
 	golang
-	steamcmd
-	minecraft-fabric
-	minecraft-neoforge
-	omt
+	oh-my-tmux
+	oh-my-zsh
+	python-uv
+	python-tldr
+	nanorc
 )
 
-DEFAULT_TOPICS=(unminimize apt-https packages omz)
+DEFAULT_TOPICS=(oh-my-zsh)
 SELECTED_TOPICS=()
 EXCLUDED_TOPICS=()
 INSTALL_COMMAND=false
@@ -53,7 +47,7 @@ ASSUME_YES=false
 
 usage() {
 	cat <<EOF
-${BOLD}${CYAN}ubuntu-slim-zsh init${RESET} ${DIM}(${CURRENT_COMMIT_HASH})${RESET}
+${BOLD}${CYAN}debian-slim-zsh init${RESET} ${DIM}(${CURRENT_COMMIT_HASH})${RESET}
 
 ${BOLD}Usage${RESET}
   init.sh [options]
@@ -73,15 +67,15 @@ ${BOLD}Run control${RESET}
   -h, --help                     show this help
 
 ${BOLD}Defaults${RESET}
-  unminimize → apt-https → packages → omz
+  oh-my-zsh
 
 ${BOLD}Topic order${RESET}
-  unminimize → apt-https → packages → rest
+  Selected order, without duplicates
 
 ${BOLD}Examples${RESET}
-  init.sh install git-config js-bun
-  init.sh install steamcmd
-  init.sh install '*' --exclude omz
+  init.sh install git-config golang
+  init.sh install oh-my-tmux
+  init.sh install '*' --exclude oh-my-zsh
   init.sh update
 
 ${BOLD}Topics${RESET}
@@ -145,6 +139,11 @@ self_update() (
 	local next_zshenv
 	local reply
 	local target_script
+
+	if [ "$GITHUB_REPOSITORY" = "" ] || [ "$BASE_URL" = "" ]; then
+		say_error 'Remote update requires INIT_GITHUB_REPOSITORY and INIT_BASE_URL for the Debian fork.'
+		exit 1
+	fi
 
 	target_script="${INIT_TARGET_SCRIPT:-$HOME/init.sh}"
 	next_script=
@@ -234,24 +233,12 @@ preview_topic() {
 	local topic="$1"
 
 	case "$topic" in
-		unminimize)
-			echo 'yes | sudo unminimize'
-			echo 'sudo apt install -y man-db'
-			;;
-		apt-https)
-			echo 'sudo apt install -y ca-certificates apt-transport-https'
-			echo "sudo sed -i 's|http://|https://|g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources"
-			echo 'sudo apt update'
-			;;
-		packages)
-			echo 'sudo apt install -y man-db curl wget nano zip unzip git tree gh jq ripgrep moreutils'
-			;;
 		git-config)
 			echo 'sudo apt install -y git git-delta git-lfs'
 			echo 'git config --global diff.lfs.textconv cat'
 			;;
 		nanorc)
-			echo 'sudo apt install -y curl unzip wget'
+			echo 'sudo apt install -y nano curl unzip wget'
 			echo 'curl -fsSL https://raw.githubusercontent.com/scopatz/nanorc/master/install.sh -o <tmp-installer>'
 			echo 'sh <tmp-installer>'
 			;;
@@ -259,56 +246,19 @@ preview_topic() {
 			echo 'sudo apt install -y python3 python-is-python3 python3-pip'
 			echo 'python -m pip install --break-system-packages uv ruff'
 			;;
-		tldr)
+		python-tldr)
 			echo 'sudo apt install -y python3 python3-pip'
 			echo 'python3 -m pip install --break-system-packages tldr'
 			;;
-		xtradeb)
-			echo 'sudo apt install -y software-properties-common'
-			echo 'sudo add-apt-repository -y ppa:xtradeb/apps'
-			;;
-		omz)
+		oh-my-zsh)
 			echo 'sudo apt install -y curl git zsh'
 			echo 'curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh -o <tmp-installer>'
 			echo 'sh <tmp-installer> --unattended'
 			;;
-		js-node-22|js-node-24)
-			echo 'sudo apt install -y curl'
-			echo 'curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh -o <tmp-installer>'
-			echo 'bash <tmp-installer>'
-			echo '. "$HOME/.nvm/nvm.sh"'
-			echo "nvm install ${topic##*-}"
-			echo 'corepack enable pnpm'
-			;;
-		js-bun)
-			echo 'sudo apt install -y curl unzip'
-			echo 'curl -fsSL https://bun.sh/install -o <tmp-installer>'
-			echo 'bash <tmp-installer>'
-			;;
 		golang)
 			echo 'sudo apt install -y golang'
 			;;
-		steamcmd)
-			echo 'use local Unix user steam by default'
-			echo 'reject root as SteamCMD runtime user'
-			echo 'sudo apt install -y ca-certificates curl sudo tar lib32gcc-s1 lib32stdc++6'
-			echo 'sudo useradd -m -s /bin/bash <user>  # if missing'
-			echo 'curl -fsSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz -o <tmp-archive>'
-			echo 'sudo -u <user> tar -xzf <tmp-archive> -C /home/<user>/steamcmd'
-			echo 'sudo -u <user> /home/<user>/steamcmd/steamcmd.sh +quit'
-			echo 'write /usr/local/bin/steamcmd wrapper that runs steamcmd.sh as <user>'
-			;;
-		minecraft-fabric)
-			echo 'prompt: Minecraft version, install directory'
-			echo 'sudo apt install -y curl openjdk-25-jdk'
-			echo 'download latest compatible Fabric server jar; write run.sh (-Xmx6G)'
-			;;
-		minecraft-neoforge)
-			echo 'prompt: Minecraft version, install directory'
-			echo 'sudo apt install -y curl openjdk-25-jdk'
-			echo 'install latest compatible NeoForge; set -Xmx6G; remove run.bat'
-			;;
-		omt)
+		oh-my-tmux)
 			echo 'sudo apt install -y git gnu-which tmux zsh'
 			echo 'git clone --single-branch https://github.com/gpakosz/.tmux.git'
 			;;
@@ -403,21 +353,15 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "$INSTALL_COMMAND" = false ]; then
-	ORDERED_TOPICS=("${SELECTED_TOPICS[@]}")
-	SELECTED_TOPICS=()
-	for topic in "${DEFAULT_TOPICS[@]}" "${ORDERED_TOPICS[@]}"; do
-		append_topics SELECTED_TOPICS "$topic"
-	done
+	SELECTED_TOPICS=("${DEFAULT_TOPICS[@]}")
 fi
 
-ORDERED_TOPICS=()
-for topic in unminimize apt-https packages "${SELECTED_TOPICS[@]}"; do
-	contains_topic "$topic" "${SELECTED_TOPICS[@]}" || continue
+FILTERED_TOPICS=()
+for topic in "${SELECTED_TOPICS[@]}"; do
 	contains_topic "$topic" "${EXCLUDED_TOPICS[@]}" && continue
-	contains_topic "$topic" "${ORDERED_TOPICS[@]}" && continue
-	ORDERED_TOPICS+=("$topic")
+	FILTERED_TOPICS+=("$topic")
 done
-SELECTED_TOPICS=("${ORDERED_TOPICS[@]}")
+SELECTED_TOPICS=("${FILTERED_TOPICS[@]}")
 
 confirm_install() {
 	local reply
@@ -443,6 +387,11 @@ run_topic() {
 	local topic="$1"
 	local topic_script
 	local status
+
+	if [ "$BASE_URL" = "" ]; then
+		bash "$TOPIC_DIR/$topic.sh"
+		return $?
+	fi
 
 	topic_script="$(mktemp "${TMPDIR:-/tmp}/init-topic-$topic.XXXXXX")" || return 1
 

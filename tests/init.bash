@@ -8,6 +8,7 @@ export ROOT CHECK_DIR
 export HOME="$CHECK_DIR/home" TMPDIR="$CHECK_DIR/tmp" NO_COLOR=1
 export COMMAND_LOG="$CHECK_DIR/commands"
 export CURL_FAIL=false APT_FAIL=false UPDATE_INVALID=false UPDATE_HASH=b1ec88e
+export INIT_BASE_URL= INIT_GITHUB_REPOSITORY=
 mkdir -p "$HOME" "$TMPDIR"
 touch "$COMMAND_LOG"
 
@@ -21,6 +22,10 @@ sudo() {
 
 python() {
 	echo "python $*" >> "$COMMAND_LOG"
+}
+
+python3() {
+	echo "python3 $*" >> "$COMMAND_LOG"
 }
 
 curl() {
@@ -54,7 +59,7 @@ curl() {
 		*) return 23 ;;
 	esac
 }
-export -f sudo python curl
+export -f sudo python python3 curl
 
 run() {
 	local expected="$1" status=0
@@ -71,20 +76,36 @@ run 0 --help
 run 0 install --help
 run 0 update --help
 run 0 --list
-[ "$(echo "$OUTPUT" | wc -l)" -eq 17 ]
-run 0 install git-config packages git-config apt-https --exclude apt-https --dry-run
-[[ "$OUTPUT" == *'Preview topic: packages'*'Preview topic: git-config'* ]]
-[[ "$OUTPUT" != *'Preview topic: apt-https'* ]]
+[ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc' ]
+while IFS= read -r topic; do
+	[ -f "$ROOT/init.d/$topic.sh" ]
+	grep -q "'$topic:" "$ROOT/src/_init.sh"
+done <<< "$OUTPUT"
+topic_files=("$ROOT"/init.d/*.sh)
+[ "${#topic_files[@]}" -eq 7 ]
+run 0 install git-config golang git-config python-uv --exclude python-uv --dry-run
+[[ "$OUTPUT" == *'Preview topic: git-config'*'Preview topic: golang'* ]]
+[[ "$OUTPUT" != *'Preview topic: python-uv'* ]]
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic: git-config')" -eq 1 ]
+run 0 install nanorc python-tldr python-uv oh-my-zsh oh-my-tmux golang git-config --dry-run
+[[ "$OUTPUT" == *'Preview topic: nanorc'*'Preview topic: python-tldr'*'Preview topic: python-uv'*'Preview topic: oh-my-zsh'*'Preview topic: oh-my-tmux'*'Preview topic: golang'*'Preview topic: git-config'* ]]
 run 0 --dry-run
-[[ "$OUTPUT" == *'Preview topic: unminimize'*'Preview topic: apt-https'*'Preview topic: packages'*'Preview topic: omz'* ]]
+[[ "$OUTPUT" == *'Preview topic: oh-my-zsh'* ]]
+[ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 1 ]
+run 0 install '*' --dry-run
+[ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 7 ]
 run 0 install '*' --exclude '*' --dry-run
 [ "$OUTPUT" = '' ]
 run 1 install unknown --dry-run
+run 1 install unminimize --dry-run
+run 1 install xtradeb --dry-run
 run 1 install
 run 1 update extra
 run 0 install golang
 [[ "$OUTPUT" == *'Proceed? [y/N]'*'Cancelled.'* ]]
+[ ! -s "$COMMAND_LOG" ]
+run 1 update
+[[ "$OUTPUT" == *'Remote update requires INIT_GITHUB_REPOSITORY and INIT_BASE_URL'* ]]
 [ ! -s "$COMMAND_LOG" ]
 
 run 0 install golang -y
@@ -93,6 +114,16 @@ OUTPUT="$(echo y | bash "$ROOT/init.sh" install golang 2>&1)"
 [[ "$OUTPUT" == *'Topic complete: golang'* ]]
 APT_FAIL=true run 1 install golang python-uv -y
 [[ "$OUTPUT" == *'Topic failed: golang'*'Topic complete: python-uv'*'Failed topics: golang'* ]]
+run 0 install python-tldr python-uv -y
+[[ "$OUTPUT" == *'Topic complete: python-tldr'*'Topic complete: python-uv'* ]]
+run 0 install python-uv python-tldr -y
+[[ "$OUTPUT" == *'Topic complete: python-uv'*'Topic complete: python-tldr'* ]]
+! grep -q '^curl ' "$COMMAND_LOG"
+
+export INIT_BASE_URL=https://fixture.invalid/debian-slim-zsh
+export INIT_GITHUB_REPOSITORY=fixture/debian-slim-zsh
+run 0 install golang -y
+[[ "$OUTPUT" == *'Topic complete: golang'* ]]
 CURL_FAIL=true run 1 install golang -y
 [[ "$OUTPUT" == *'Topic failed: golang'* ]]
 
@@ -109,7 +140,7 @@ UPDATE_INVALID=true UPDATE_HASH=2222222222222222222222222222222222222222 run 2 u
 cmp "$HOME/init.sh" <(sed 's/^CURRENT_COMMIT_HASH="[0-9a-f]*"/CURRENT_COMMIT_HASH="1111111"/' "$ROOT/init.sh")
 
 CURL_FAIL=true
-for topic in js-bun js-node-22 js-node-24 nanorc omz; do
+for topic in nanorc oh-my-zsh; do
 	status=0
 	bash "$ROOT/init.d/$topic.sh" >/dev/null 2>&1 || status=$?
 	[ "$status" -eq 23 ]

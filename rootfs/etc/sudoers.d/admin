@@ -1,0 +1,2 @@
+Defaults:admin preserve_groups
+admin ALL=(ALL:ALL) NOPASSWD: ALL

@@ -1,7 +1,7 @@
 #!/bin/env bash
 set -euo pipefail
 
-sudo apt install -y curl unzip wget
+sudo apt install -y nano curl unzip wget
 
 INSTALLER_PATH="$(mktemp "${TMPDIR:-/tmp}/nanorc-install.XXXXXX")"
 trap 'rm -f "$INSTALLER_PATH"' EXIT
