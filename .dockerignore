@@ -2,7 +2,6 @@
 .hermes
 .env
 .env.*
-plan.md
 README.md
 docs
 tests

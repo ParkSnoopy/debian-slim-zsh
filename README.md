@@ -26,6 +26,7 @@ This example assumes a Wayland desktop with PipeWire and its PulseAudio-compatib
 Remove unavailable device or socket mounts and their corresponding environment options before running the command.
 For example, many hosts do not have `/dev/accel`.
 
+> [!CAUTION]
 > **Use only with trusted code.**
 > This example disables several isolation controls and exposes host devices and desktop services.
 > Read-only socket mounts still permit communication with those services.
@@ -59,14 +60,14 @@ podman run -it \
   --cap-add SYS_ADMIN \
   --cap-add MKNOD \
   --security-opt label=disable \
-  --security-opt seccomp=unconfined \
   --security-opt apparmor=unconfined \
   --security-opt unmask=ALL \
   ghcr.io/parksnoopy/debian-slim-zsh:latest \
-  /usr/local/bin/as-admin /usr/bin/tmux -2u new-session -A -s workspace
+  /usr/local/bin/as-admin /usr/bin/tmux -2u
 ```
 
 Device and socket access does not install GPU drivers, GUI libraries, audio clients, or VPN tools.
+Seccomp uses Podman's default profile.
 `NET_ADMIN` applies inside the container's network namespace, not the physical host network.
 For nested containers, [install the Podman topic and use its sudo wrapper](#run-nested-podman).
 
@@ -170,8 +171,10 @@ That mode needs working UID/GID mapping helpers and subordinate ranges that fit 
 The image and example do not configure or verify admin's nested rootless engine.
 `sudo podman` uses a separate engine and storage, not admin's engine with extra permissions.
 
+> [!CAUTION]
 > **Use only with trusted code.**
-> This example adds container capabilities and disables security filters to allow nested mounts.
+> This example adds capabilities and relaxes AppArmor, SELinux labeling, and masked paths for nested mounts.
+> It keeps Podman's default seccomp profile.
 > It is an unverified example, not a tested nested-container profile.
 
 On the host:
@@ -182,7 +185,6 @@ podman run -it --hostname debian-nested --name debian-nested \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
   --cap-add SYS_ADMIN --cap-add MKNOD \
   --security-opt label=disable \
-  --security-opt seccomp=unconfined \
   --security-opt apparmor=unconfined \
   --security-opt unmask=ALL \
   --device /dev/fuse:/dev/fuse \
@@ -273,11 +275,11 @@ podman exec -it debian-workspace as-admin zsh -l
 For tmux:
 
 ```bash
-podman exec -it debian-workspace as-admin tmux -2u attach-session -t workspace
+podman exec -it debian-workspace as-admin tmux -2u attach-session
 ```
 
 These commands target the full workspace. Substitute `debian-dev` for the minimal example.
-The tmux attach command requires the full example's existing `workspace` session.
+The tmux attach command requires an existing session.
 Keep the original workspace process running while using these extra terminals.
 Exiting the original shell or last tmux session stops the container.
 
