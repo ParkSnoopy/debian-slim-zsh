@@ -7,6 +7,11 @@ on:
   pull_request:
     branches: ['main']
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+  queue: max
+
 # Defines two custom environment variables for the workflow. These are used for the Container registry domain, and a name for the Docker image that this workflow builds.
 env:
   REGISTRY: ghcr.io
@@ -19,12 +24,14 @@ jobs:
 
     # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
       - name: actions/checkout@v6 - Check Out Repository
         uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: bash - Test Installer
         run: bash tests/init.bash
@@ -32,7 +39,28 @@ jobs:
       - name: bash - Set Image Tag
         id: tag
         run: |
-          echo "DATE_TAG=$(TZ=Asia/Seoul date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          version="$(<.version)"
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo 'Invalid .version: expected a bare major.minor.patch version.' >&2
+            exit 1
+          fi
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            refs="$(git ls-remote --refs --tags origin "refs/tags/$version-*")"
+            latest=0
+            while read -r commit ref; do
+              suffix="${ref#refs/tags/$version-}"
+              [[ "$ref" == "refs/tags/$version-$suffix" && "$suffix" =~ ^[0-9]{3,}$ ]] || continue
+              number=$((10#$suffix))
+              if (( number > latest )); then
+                latest="$number"
+              fi
+            done <<< "$refs"
+            printf -v image_tag '%s-%03d' "$version" "$((latest + 1))"
+          else
+            image_tag="$version-pr-$GITHUB_RUN_ID"
+          fi
+          echo "IMAGE_TAG=$image_tag" >> "$GITHUB_OUTPUT"
 
       # Uses the `docker/login-action` action to log in to the Container registry registry using the account and password that will publish the packages. Once published, the packages are scoped to the account defined here.
       - name: docker/login-action@v4 - Log in to the Container Registry
@@ -61,13 +89,13 @@ jobs:
           file: Containerfile
           load: true
           push: false
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.DATE_TAG }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.IMAGE_TAG }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: bash - Test Nested Podman
         timeout-minutes: 10
         env:
-          TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.DATE_TAG }}
+          TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.IMAGE_TAG }}
         run: |
           # Privileged only for this disposable nested-engine smoke test.
           docker run --rm --privileged --user 0:0 \
@@ -98,11 +126,26 @@ jobs:
       - name: bash - Test Container Lifecycle
         if: ${{ !cancelled() && steps.push.outcome == 'success' }}
         env:
-          TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.DATE_TAG }}
+          TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.IMAGE_TAG }}
         run: bash tests/container.bash "$TEST_IMAGE"
 
       - name: bash - Publish Tested Image
         if: github.event_name == 'push'
         env:
-          TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.DATE_TAG }}
-        run: docker push "$TEST_IMAGE"
+          TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.IMAGE_TAG }}
+        run: |
+          set -euo pipefail
+          docker push "$TEST_IMAGE"
+          remote_id="$(docker manifest inspect "$TEST_IMAGE" | jq -er '.config.digest')"
+          [[ "$remote_id" == "$(docker image inspect --format '{{.Id}}' "$TEST_IMAGE")" ]]
+
+      - name: bash - Publish Git Tag
+        if: github.event_name == 'push'
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.IMAGE_TAG }}
+        run: |
+          set -euo pipefail
+          git tag "$IMAGE_TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$IMAGE_TAG"
+          ref="$(git ls-remote --exit-code --refs origin "refs/tags/$IMAGE_TAG")"
+          [[ "$ref" == "$GITHUB_SHA"$'\t'"refs/tags/$IMAGE_TAG" ]]

@@ -287,11 +287,16 @@ Its separate nested smoke test installs the Podman topic and runs `hello-world` 
 The test requires a successful exit and the expected greeting. It uses a disposable privileged outer Docker container without a host engine socket.
 That test does not verify the README's restricted rootless outer-container configuration.
 Lifecycle tests still run after a nested smoke-test failure. Either failure blocks publication.
-Pushes to `main` publish tags in `YYYYMMDD` format using the `Asia/Seoul` date.
-The full image reference is `ghcr.io/parksnoopy/debian-slim-zsh:{YYYYMMDD}`.
+The root `.version` file supplies a bare `major.minor.patch` version.
+Pushes to `main` publish matching Git and image tags as `{version}-{sequence:03d}`, starting at `001` for each version.
+The sequence advances from the highest matching remote Git tag, not the workflow run number or date.
+The full image reference is `ghcr.io/parksnoopy/debian-slim-zsh:{version}-{sequence:03d}`.
+The concurrency group serializes main-branch runs and queues pending runs without canceling the active publication.
+After testing, publication pushes the image and verifies its remote configuration digest against the loaded image.
+Only then does it create the Git tag at the triggering commit and verify the remote ref. Existing Git tags are never replaced.
 
-Pull requests run the same build and checks without publication.
-Repeated successful builds on the same date replace that date's tag.
+Pull requests run the same build and checks under a local `{version}-pr-{run_id}` image tag without publication or sequence allocation.
+Changing `.version` starts a separate sequence. Failed build or test runs create no publication tag.
 Do not infer a successful hosted run or publication from local syntax checks.
 
 ### Remaining acceptance gates
