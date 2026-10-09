@@ -235,7 +235,8 @@ Resume this workspace with `podman start -ai debian-nested`.
 ## Back up and migrate with tar
 
 This procedure restores all archived home files into a replacement container.
-Outside home, it adds only missing files and keeps existing image files and directory metadata.
+It also replaces Debian package files, configuration, and package-manager state with the archived versions.
+Other system paths receive only missing files; the replacement image retains s6-overlay and existing `/usr/local` files.
 It does not compare timestamps or package versions, and it does not delete destination-only files.
 The complete container migration procedure is not yet runtime-verified.
 
@@ -309,18 +310,12 @@ podman run -it --hostname debian-restored --name debian-restored \
   ghcr.io/parksnoopy/debian-slim-zsh:latest
 ```
 
-From another host terminal in a directory outside the shared project folder, copy the archive out of the source and into the replacement:
-
-```bash
-podman cp debian-workspace:/home/admin/workspace/rootfs.tar rootfs.tar
-podman cp rootfs.tar debian-restored:/tmp/rootfs.tar
-```
-
 For a full workspace, use its launch options with a different container name and fresh data volumes instead of existing ones.
 Leave other host project folders unmounted until restoration is complete.
 Stop any application writers or inner containers in the replacement before restoring.
 
 Run the following commands inside the replacement as `admin`, with `$PWD` at the same guest project path as the source and `$HOME` matching the archived home path.
+This example assumes you are already in `/home/admin/workspace` and `rootfs.tar` is in that directory.
 First restore missing files outside home, without changing existing files or directory metadata:
 
 ```bash
@@ -339,10 +334,33 @@ sudo tar \
   --exclude='./etc/s6-overlay' \
   --exclude="./${PWD#/}" \
   --exclude="./${HOME#/}" \
-  -xpf /tmp/rootfs.tar \
+  -xpf rootfs.tar \
   -C /
 ```
 
+Proceed only if that command succeeds.
+Then restore the Debian package trees together, replacing matching files and directory metadata.
+This includes `/usr`, `/etc`, `/var`, and the standard binary/library links, rather than restoring the dpkg database alone:
+
+```bash
+sudo tar \
+  --acls \
+  --xattrs \
+  --xattrs-include='*' \
+  --xattrs-exclude='security.selinux' \
+  --numeric-owner \
+  --sparse \
+  --exclude='./etc/s6-overlay' \
+  --exclude='./usr/local' \
+  --exclude="./${PWD#/}" \
+  --exclude="./${HOME#/}" \
+  -xpf rootfs.tar \
+  -C / ./bin ./sbin ./lib ./usr ./etc ./var
+```
+
+The archive must come from the same architecture and Debian filesystem layout.
+This restores the source's Debian package versions; it does not retain the replacement image's newer Debian packages.
+It is not a clean package rollback because destination-only files remain.
 Proceed only if that command succeeds.
 Then restore every archived home file, replacing matching destination files:
 
@@ -355,17 +373,17 @@ sudo tar \
   --numeric-owner \
   --sparse \
   --exclude="./${PWD#/}" \
-  -xpf /tmp/rootfs.tar \
+  -xpf rootfs.tar \
   -C / "./${HOME#/}"
 ```
 
-These commands clear the shell's `TAR_OPTIONS=--no-same-owner` setting so container root can restore numeric ownership.
-They omit `--overwrite`; normal tar extraction still replaces matching files during the home pass.
+Run extraction through `sudo` so container root can restore numeric ownership.
+They omit `--overwrite`; normal tar extraction still replaces matching files during the package and home passes.
 The SELinux exclusion leaves labels to the destination's security policy. Verify other required attributes after restoration.
 Missing files restored outside home can still be incompatible with the newer image.
-This procedure does not merge APT package records: reinstall required system packages through the installer or APT.
-For example, reinstall the `podman` topic before using restored nested-engine storage.
-Restart the replacement after both commands succeed, then check home files, ownership, sudo, and required tools.
+This procedure restores APT and dpkg state with the package trees instead of merging package records.
+After restoration, run `dpkg --audit` and `sudo apt-get check` before installing or updating packages.
+Restart the replacement after all three restore commands succeed, then check home files, ownership, sudo, and required tools.
 The minimal example has no desktop devices or nested-container permissions; those require the corresponding launch options.
 Keep the original container and archive until the replacement passes all required checks.
 
