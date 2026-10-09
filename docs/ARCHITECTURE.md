@@ -287,7 +287,7 @@ Its separate nested smoke test installs the Podman topic and runs `hello-world` 
 The test requires a successful exit and the expected greeting. It uses a disposable privileged outer Docker container without a host engine socket.
 That test does not verify the README's restricted rootless outer-container configuration.
 Lifecycle tests still run after a nested smoke-test failure. Either failure blocks publication.
-The root `.version` file supplies a bare `major.minor.patch` version.
+The root `.version` file supplies a bare `major.minor.patch` version after trimming leading and trailing whitespace, including CRLF line endings.
 Pushes to `main` publish matching Git and image tags as `{version}-{sequence:03d}`, starting at `001` for each version.
 The sequence advances from the highest matching remote Git tag, not the workflow run number or date.
 The full image reference is `ghcr.io/parksnoopy/debian-slim-zsh:{version}-{sequence:03d}`.
