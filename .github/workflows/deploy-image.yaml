@@ -119,9 +119,9 @@ jobs:
               printf "%s\n" "$output"
               [[ "$output" == *"Hello from Docker!"* ]]
               sudo -n podman-compose -p nested-smoke -f "$compose_file" down
-              status=0
-              sudo -n podman container exists nested-smoke_smoke_1 || status=$?
-              [[ "$status" == 1 ]]
+              exists_status=0
+              sudo -n podman container exists nested-smoke_smoke_1 || exists_status=$?
+              [[ "$exists_status" == 1 ]]
               trap - EXIT
             '
 
