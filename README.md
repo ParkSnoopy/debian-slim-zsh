@@ -39,9 +39,9 @@ podman run -it \
   --runtime crun \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
   --group-add keep-groups \
-  --workdir /home/admin/host \
+  --workdir /home/admin/workspace \
   --volume debian-workspace-home:/home/admin \
-  --volume "$PWD:/home/admin/host" \
+  --volume "$PWD:/home/admin/workspace" \
   --volume debian-workspace-storage:/var/lib/containers \
   --mount "type=bind,src=${XDG_RUNTIME_DIR:?Set XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY:-wayland-0},dst=/run/user/1000/wayland-0,ro=true" \
   --mount "type=bind,src=${XDG_RUNTIME_DIR}/pipewire-0,dst=/run/user/1000/pipewire-0,ro=true" \
@@ -231,6 +231,128 @@ The named volume retains inner images and data without using the host Podman soc
 Do not reuse it with a different user mapping or storage driver.
 Stop inner containers before exiting the workspace shell.
 Resume this workspace with `podman start -ai debian-nested`.
+
+## Back up and migrate with tar
+
+This procedure restores all archived home files into a replacement container.
+Outside home, it adds only missing files and keeps existing image files and directory metadata.
+It does not compare timestamps or package versions, and it does not delete destination-only files.
+The complete container migration procedure is not yet runtime-verified.
+
+### Archive the workspace
+
+Stop application writers and all inner containers first, including any run by admin's rootless engine.
+Do not install or update packages during the archive.
+Keep the source workspace running while creating the archive.
+This is not an atomic snapshot. Use application-specific backups for databases.
+
+Run these commands inside the source workspace as `admin`.
+The command writes `rootfs.tar` in the current directory after changing to `$HOME` and replaces any existing file with that name:
+
+```bash
+sudo tar \
+  --acls \
+  --xattrs \
+  --xattrs-include='*' \
+  --numeric-owner \
+  --sparse \
+  --exclude='./proc' \
+  --exclude='./sys' \
+  --exclude='./dev' \
+  --exclude='./run' \
+  --exclude='./home/admin/workspace' \
+  --exclude="./${PWD#/}/rootfs.tar" \
+  -cpf rootfs.tar -C / .
+```
+
+Container root creates the archive. The archive itself is excluded from the backup.
+Proceed only if the archive command exits successfully. A failed command can leave a partial archive.
+
+The runtime directories, `/home/admin/workspace`, and the output archive are excluded by this command.
+Project files at `/home/admin/workspace` remain in the host folder and are available whenever the same bind mount is attached.
+The bind mount is not a separate backup of those files.
+Other mounts are traversed, including home volumes, nested Podman storage, and project folders mounted elsewhere.
+Symbolic links are stored as links, not followed.
+Sockets are not archived, and inaccessible or changing files can prevent a complete backup.
+The archive can contain credentials and private project files. Keep it private.
+ACLs and extended attributes can require compatible filesystems, mappings, and security policies on the destination.
+Review attribute warnings and verify required metadata after restore; tar can report attribute failures without a failing exit status.
+
+Inspect the archive before restoration:
+
+```bash
+sudo tar -tf rootfs.tar
+```
+
+A readable archive alone does not prove that application data is consistent.
+
+### Restore into a replacement
+
+Create a fresh container from the image you want to keep.
+Use the same architecture and compatible user mapping as the source.
+Do not attach existing data volumes or project folders at other paths during restoration: archive writes would also change those mounts.
+The project bind mount at `/home/admin/workspace` is excluded from restoration and can be reused.
+On the host, start the replacement without a backup mount:
+
+```bash
+podman run -it --hostname debian-restored --name debian-restored \
+  --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
+  ghcr.io/parksnoopy/debian-slim-zsh:latest
+```
+
+From another host terminal, copy the archive out of the source and into the replacement:
+
+```bash
+podman cp debian-workspace:/home/admin/rootfs.tar rootfs.tar
+podman cp rootfs.tar debian-restored:/tmp/rootfs.tar
+```
+
+For a full workspace, use its launch options with a different container name and fresh data volumes instead of existing ones.
+Leave other host project folders unmounted until restoration is complete.
+Stop any application writers or inner containers in the replacement before restoring.
+
+Run the following commands inside the replacement as `admin`, whose `$HOME` must match the archived home path.
+First restore missing files outside home, without changing existing files or directory metadata:
+
+```bash
+sudo tar \
+  --acls \
+  --xattrs \
+  --xattrs-include='*' \
+  --xattrs-exclude='security.selinux' \
+  --numeric-owner \
+  --sparse \
+  --skip-old-files \
+  --exclude="./${HOME#/}" \
+  -xpf /tmp/rootfs.tar \
+  -C /
+```
+
+Proceed only if that command succeeds.
+Then restore every archived home file, replacing matching destination files:
+
+```bash
+sudo tar \
+  --acls \
+  --xattrs \
+  --xattrs-include='*' \
+  --xattrs-exclude='security.selinux' \
+  --numeric-owner \
+  --sparse \
+  --exclude='./home/admin/workspace' \
+  -xpf /tmp/rootfs.tar \
+  -C / "./${HOME#/}"
+```
+
+These commands clear the shell's `TAR_OPTIONS=--no-same-owner` setting so container root can restore numeric ownership.
+They omit `--overwrite`; normal tar extraction still replaces matching files during the home pass.
+The SELinux exclusion leaves labels to the destination's security policy. Verify other required attributes after restoration.
+Missing files restored outside home can still be incompatible with the newer image.
+This procedure does not merge APT package records: reinstall required system packages through the installer or APT.
+For example, reinstall the `podman` topic before using restored nested-engine storage.
+Restart the replacement after both commands succeed, then check home files, ownership, sudo, and required tools.
+The minimal example has no desktop devices or nested-container permissions; those require the corresponding launch options.
+Keep the original container and archive until the replacement passes all required checks.
 
 ## Install your preferred tools
 
