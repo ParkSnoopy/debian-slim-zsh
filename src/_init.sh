@@ -13,7 +13,7 @@ _init_sh() {
 		'python-uv:Install Python 3, uv, and ruff'
 		'python-tldr:Install tldr client'
 		'nanorc:Install syntax highlighting for Nano'
-		'podman:Install Podman and sudo defaults for nested containers'
+		'podman:Install Podman, podman-compose, and sudo defaults for nested containers'
 		'\*:All available topics'
 	)
 

@@ -18,13 +18,16 @@ sudo() {
 	echo "sudo $*" >> "$COMMAND_LOG"
 	if [ "$APT_FAIL" = true ]; then
 		case "$*" in
-			'apt install -y golang'|'apt install -y podman crun conmon fuse-overlayfs') return 7 ;;
+			'apt install -y golang'|'apt install -y podman podman-compose crun conmon fuse-overlayfs') return 7 ;;
 		esac
 	fi
 	if [ "$1" = install ]; then
 		local -a args=("$@")
-		[ "${args[-1]}" = /usr/local/bin/podman ] || return 64
-		command install -m 755 "${args[-2]}" "$CHECK_DIR/podman"
+		case "${args[-1]}" in
+			/usr/local/bin/podman|/usr/local/bin/podman-compose) ;;
+			*) return 64 ;;
+		esac
+		command install -m 755 "${args[-2]}" "$CHECK_DIR/${args[-1]##*/}"
 	fi
 }
 
@@ -100,7 +103,7 @@ run 0 install git-config golang git-config python-uv --exclude python-uv --dry-r
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic: git-config')" -eq 1 ]
 run 0 install podman nanorc python-tldr python-uv oh-my-zsh oh-my-tmux golang git-config --dry-run
 [[ "$OUTPUT" == *'Preview topic: podman'*'Preview topic: nanorc'*'Preview topic: python-tldr'*'Preview topic: python-uv'*'Preview topic: oh-my-zsh'*'Preview topic: oh-my-tmux'*'Preview topic: golang'*'Preview topic: git-config'* ]]
-[[ "$OUTPUT" == *'sudo apt install -y podman crun conmon fuse-overlayfs'*'/usr/local/bin/podman'* ]]
+[[ "$OUTPUT" == *'sudo apt install -y podman podman-compose crun conmon fuse-overlayfs'*'/usr/local/bin/podman'*'/usr/local/bin/podman-compose'* ]]
 run 0 --dry-run
 [[ "$OUTPUT" == *'Preview topic: oh-my-zsh'* ]]
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 1 ]
@@ -142,13 +145,18 @@ run 0 install python-uv python-tldr -y
 
 APT_FAIL=true run 1 install podman -y
 [ ! -e "$CHECK_DIR/podman" ]
+[ ! -e "$CHECK_DIR/podman-compose" ]
 run 0 install podman -y
 [[ "$OUTPUT" == *'Topic complete: podman'* ]]
 [ -x "$CHECK_DIR/podman" ]
 bash -n "$CHECK_DIR/podman"
+[ -x "$CHECK_DIR/podman-compose" ]
+bash -n "$CHECK_DIR/podman-compose"
 cp "$CHECK_DIR/podman" "$CHECK_DIR/podman-first"
+cp "$CHECK_DIR/podman-compose" "$CHECK_DIR/podman-compose-first"
 run 0 install podman -y
 cmp "$CHECK_DIR/podman" "$CHECK_DIR/podman-first"
+cmp "$CHECK_DIR/podman-compose" "$CHECK_DIR/podman-compose-first"
 
 export INIT_BASE_URL=https://fixture.invalid/debian-slim-zsh
 export INIT_GITHUB_REPOSITORY=fixture/debian-slim-zsh
@@ -157,6 +165,7 @@ run 0 install golang -y
 grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/golang.topic' "$COMMAND_LOG"
 run 0 install podman -y
 cmp "$CHECK_DIR/podman" "$CHECK_DIR/podman-first"
+cmp "$CHECK_DIR/podman-compose" "$CHECK_DIR/podman-compose-first"
 grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/podman.topic' "$COMMAND_LOG"
 CURL_FAIL=true run 1 install golang -y
 [[ "$OUTPUT" == *'Topic failed: golang'* ]]
@@ -203,9 +212,10 @@ container_args=(--cgroups=disabled --network=host --log-driver=k8s-file --securi
 
 check_podman() {
 	local expected_status="$1" status=0
+	local wrapper="${PODMAN_TEST_WRAPPER:-podman}"
 	shift
 	: > "$CHECK_DIR/podman-argv"
-	bash "$CHECK_DIR/podman" "$@" > "$CHECK_DIR/podman-stdout" 2> "$CHECK_DIR/podman-stderr" || status=$?
+	bash "$CHECK_DIR/$wrapper" "$@" > "$CHECK_DIR/podman-stdout" 2> "$CHECK_DIR/podman-stderr" || status=$?
 	[ "$status" -eq "$expected_status" ]
 	if [ "${#expected_args[@]}" -eq 0 ]; then
 		[ ! -s "$CHECK_DIR/podman-argv" ]
@@ -216,7 +226,7 @@ check_podman() {
 	fi
 }
 
-payload=(--name 'two words' --network=none --rm=false image sh -c 'echo "$HOME"' '')
+payload=(--name 'two words' --rm=false image sh -c 'echo "$HOME"' '')
 expected_args=("${global_args[@]}" run "${container_args[@]}" --rm "${payload[@]}")
 check_podman 0 run "${payload[@]}"
 check_podman 0 container run "${payload[@]}"
@@ -224,6 +234,12 @@ PODMAN_TEST_STATUS=37 check_podman 37 run "${payload[@]}"
 expected_args=("${global_args[@]}" create "${container_args[@]}" image)
 check_podman 0 create image
 check_podman 0 container create image
+for network in --network=host --network=none --net=none; do
+	expected_args=("${global_args[@]}" create --cgroups=disabled --log-driver=k8s-file --security-opt label=disable --security-opt apparmor=unconfined "$network" image)
+	check_podman 0 create "$network" image
+done
+expected_args=("${global_args[@]}" create --cgroups=disabled --log-driver=k8s-file --security-opt label=disable --security-opt apparmor=unconfined --network host image)
+check_podman 0 create --network host image
 expected_args=("${global_args[@]}" ps --all)
 check_podman 0 ps --all
 expected_args=("${global_args[@]}" --help)
@@ -233,5 +249,11 @@ check_podman 2 --log-level=debug run image
 grep -q 'Put the subcommand first' "$CHECK_DIR/podman-stderr"
 expected_args=(/usr/bin/podman run "${payload[@]}")
 PODMAN_TEST_UID=1000 check_podman 0 run "${payload[@]}"
+compose_payload=(-f 'two words/compose.yaml' up -d)
+expected_args=(/usr/bin/podman-compose --podman-path /usr/local/bin/podman --in-pod=false --podman-run-args=--rm=false "${compose_payload[@]}")
+PODMAN_TEST_WRAPPER=podman-compose check_podman 0 "${compose_payload[@]}"
+PODMAN_TEST_WRAPPER=podman-compose PODMAN_TEST_STATUS=37 check_podman 37 "${compose_payload[@]}"
+expected_args=(/usr/bin/podman-compose "${compose_payload[@]}")
+PODMAN_TEST_WRAPPER=podman-compose PODMAN_TEST_UID=1000 check_podman 0 "${compose_payload[@]}"
 unset -f id exec
 echo 'Installer selection, execution, failure, update, and download guards passed.'

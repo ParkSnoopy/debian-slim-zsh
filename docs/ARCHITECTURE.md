@@ -146,7 +146,7 @@ Image replacement and storage cleanup must be explicit user operations.
 
 ## Optional Podman wrapper
 
-[podman.topic](../init.d/podman.topic) installs Podman, crun, conmon, and fuse-overlayfs through APT.
+[podman.topic](../init.d/podman.topic) installs Podman, podman-compose, crun, conmon, and fuse-overlayfs through APT.
 It generates and syntax-checks a wrapper, then installs it as root-owned `/usr/local/bin/podman` with mode `0755`.
 The package-owned `/usr/bin/podman` remains unchanged. The topic does not start an engine, pull images, or rewrite Podman configuration files.
 The image's explicit sudo policy selects the local wrapper before the package executable, independently of Debian's default search order.
@@ -162,10 +162,19 @@ Non-root calls pass through unchanged. Root calls receive these defaults:
 
 The `container run` and `container create` aliases receive the same defaults as their top-level forms.
 Caller arguments follow injected defaults. For example, `run --rm=false` retains the container.
+An explicit `--network` or `--net` option suppresses the default host network flag because Podman rejects repeated non-bridge network modes.
 Root calls require command-first syntax, except top-level help and version flags.
 Leading global options are rejected rather than silently bypassing run defaults. Native syntax remains available through `sudo /usr/bin/podman`.
 The wrapper neither changes outer-container permissions nor configures admin's subordinate mappings.
 It does not add creation options to `build` or other subcommands.
+
+The topic also installs a root-owned `/usr/local/bin/podman-compose` wrapper with mode `0755`.
+Non-root calls delegate to `/usr/bin/podman-compose` unchanged.
+Root calls select `/usr/local/bin/podman` with `--podman-path`, disable automatic pods with `--in-pod=false`, and supply `--podman-run-args=--rm=false`.
+Compose-generated run commands therefore receive the shared nested defaults without automatic removal of managed containers.
+Caller options follow these defaults. Leading Podman global options still require bypassing the Podman wrapper.
+Compose files must use `network_mode: host` for the documented non-bridge configuration.
+The wrapper does not rewrite Compose services, networks, ports, or resource limits.
 
 ## Planned extensions: not implemented
 

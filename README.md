@@ -213,6 +213,17 @@ The wrapper cannot add the outer container's device access or permissions after 
 Put the subcommand first, as in `sudo podman run ...` or `sudo podman ps`.
 Use `sudo /usr/bin/podman` to bypass the wrapper when you need full control of global options.
 
+The topic also installs `podman-compose`. From a folder with a Compose file, use:
+
+```bash
+sudo podman-compose up -d
+sudo podman-compose down
+```
+
+Set `network_mode: host` on each service to use the workspace network without creating inner bridge networks.
+The sudo wrapper disables automatic pods and retains Compose containers until you remove them.
+Plain `podman-compose` as admin uses the package defaults and needs working rootless Podman.
+
 Inner `--network=host` shares the workspace network, not the physical host network.
 This example does not provide separate inner-container networks or resource limits.
 
@@ -247,7 +258,7 @@ Choose tools in any order:
 | `python-uv` | Python, uv, and ruff |
 | `python-tldr` | Python and the tldr client |
 | `nanorc` | Nano and syntax highlighting |
-| `podman` | Podman, crun, conmon, fuse-overlayfs, and nested defaults for `sudo podman` |
+| `podman` | Podman, podman-compose, crun, conmon, fuse-overlayfs, and sudo wrappers for nested containers |
 
 Preview without installing:
 

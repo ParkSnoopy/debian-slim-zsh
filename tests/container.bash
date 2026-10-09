@@ -89,6 +89,10 @@ grep -q TMUX_OUTPUT_OK "$CHECK_DIR/tmux"
 		fi
 		[ "$(stat -c %u:%g:%a /usr/local/bin/podman)" = 0:0:755 ]
 		[ "$(sudo -n bash -c "command -v podman")" = /usr/local/bin/podman ]
+		[ "$(stat -c %u:%g:%a /usr/local/bin/podman-compose)" = 0:0:755 ]
+		[ "$(sudo -n bash -c "command -v podman-compose")" = /usr/local/bin/podman-compose ]
+		podman-compose --help >/dev/null
+		sudo -n podman-compose --help >/dev/null
 		podman --version
 		sudo -n podman --version
 	' >/dev/null

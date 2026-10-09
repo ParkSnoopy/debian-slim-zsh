@@ -260,11 +260,13 @@ preview_topic() {
 			echo 'git clone --single-branch https://github.com/gpakosz/.tmux.git'
 			;;
 		podman)
-			echo 'sudo apt install -y podman crun conmon fuse-overlayfs'
+			echo 'sudo apt install -y podman podman-compose crun conmon fuse-overlayfs'
 			echo 'sudo install -o root -g root -m 755 <tmp-wrapper> /usr/local/bin/podman'
+			echo 'sudo install -o root -g root -m 755 <tmp-wrapper> /usr/local/bin/podman-compose'
 			echo 'sudo podman: --runtime=crun --cgroup-manager=cgroupfs --events-backend=file --storage-driver=overlay --storage-opt=overlay.mount_program=/usr/bin/fuse-overlayfs'
 			echo 'run/create defaults: --cgroups=disabled --network=host --log-driver=k8s-file --security-opt label=disable --security-opt apparmor=unconfined'
 			echo 'run also defaults to --rm; non-root podman passes through unchanged'
+			echo 'sudo podman-compose: use the Podman wrapper without pods or automatic container removal; non-root calls pass through unchanged'
 			;;
 	esac
 }

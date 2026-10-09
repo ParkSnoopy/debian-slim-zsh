@@ -1,7 +1,7 @@
 #!/bin/env bash
 set -euo pipefail
 
-sudo apt install -y podman crun conmon fuse-overlayfs
+sudo apt install -y podman podman-compose crun conmon fuse-overlayfs
 
 WRAPPER_PATH="$(mktemp "${TMPDIR:-/tmp}/podman-wrapper.XXXXXX")"
 trap 'rm -f "$WRAPPER_PATH"' EXIT
@@ -21,10 +21,17 @@ case "${1:-}" in
 	run|create)
 		subcommand="$1"
 		shift
+		network_args=(--network=host)
+		for arg in "$@"; do
+			case "$arg" in
+				--) break ;;
+				--network|--network=*|--net|--net=*) network_args=(); break ;;
+			esac
+		done
 		if [ "$subcommand" = run ]; then
 			set -- --rm "$@"
 		fi
-		set -- "$subcommand" --cgroups=disabled --network=host \
+		set -- "$subcommand" --cgroups=disabled "${network_args[@]}" \
 			--log-driver=k8s-file --security-opt label=disable \
 			--security-opt apparmor=unconfined "$@"
 		;;
@@ -43,3 +50,17 @@ exec /usr/bin/podman --runtime=crun \
 EOF
 bash -n "$WRAPPER_PATH"
 sudo install -o root -g root -m 755 "$WRAPPER_PATH" /usr/local/bin/podman
+
+cat > "$WRAPPER_PATH" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+if [ "$(id -u)" -ne 0 ]; then
+	exec /usr/bin/podman-compose "$@"
+fi
+
+exec /usr/bin/podman-compose --podman-path /usr/local/bin/podman \
+	--in-pod=false --podman-run-args=--rm=false "$@"
+EOF
+bash -n "$WRAPPER_PATH"
+sudo install -o root -g root -m 755 "$WRAPPER_PATH" /usr/local/bin/podman-compose

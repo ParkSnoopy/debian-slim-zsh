@@ -70,13 +70,29 @@ jobs:
           TEST_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.DATE_TAG }}
         run: |
           # Privileged only for this disposable nested-engine smoke test.
-          docker run --rm --privileged --user 0:0 "$TEST_IMAGE" \
+          docker run --rm --privileged --user 0:0 \
+            --volume "$PWD/tests/compose.yaml:/tmp/nested-compose.yaml:ro" "$TEST_IMAGE" \
             /usr/local/bin/as-admin /usr/bin/zsh -lexc '
               ~/init.sh install podman -y
               [[ "$(sudo -n bash -c "command -v podman")" == /usr/local/bin/podman ]]
               output="$(sudo -n podman run docker.io/library/hello-world:latest)"
               printf "%s\n" "$output"
               [[ "$output" == *"Hello from Docker!"* ]]
+              [[ "$(sudo -n bash -c "command -v podman-compose")" == /usr/local/bin/podman-compose ]]
+              compose_file=/tmp/nested-compose.yaml
+              trap "sudo -n podman-compose -p nested-smoke -f \"$compose_file\" down" EXIT
+              sudo -n podman-compose -p nested-smoke -f "$compose_file" up -d
+              sudo -n podman wait nested-smoke_smoke_1
+              [[ "$(sudo -n podman inspect --format "{{.State.ExitCode}}" nested-smoke_smoke_1)" == 0 ]]
+              [[ "$(sudo -n podman inspect --format "{{.HostConfig.AutoRemove}}" nested-smoke_smoke_1)" == false ]]
+              output="$(sudo -n podman logs nested-smoke_smoke_1)"
+              printf "%s\n" "$output"
+              [[ "$output" == *"Hello from Docker!"* ]]
+              sudo -n podman-compose -p nested-smoke -f "$compose_file" down
+              status=0
+              sudo -n podman container exists nested-smoke_smoke_1 || status=$?
+              [[ "$status" == 1 ]]
+              trap - EXIT
             '
 
       - name: bash - Test Container Lifecycle

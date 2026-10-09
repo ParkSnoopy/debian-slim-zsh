@@ -1,0 +1,4 @@
+services:
+  smoke:
+    image: docker.io/library/hello-world:latest
+    network_mode: host
