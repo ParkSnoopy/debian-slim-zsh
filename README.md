@@ -207,6 +207,17 @@ Inside the running source container as `admin`, from `/home/admin/workspace`.
 Stop application writers and all inner containers; do not change packages during backup.
 This is not an atomic snapshot; back up databases separately.
 Install `zstd` in both containers first: `sudo apt-get update && sudo apt-get install -y zstd`.
+
+Optional cache cleanup: run commands for installed tools only; stop sccache if running and adjust its path for custom cache locations.
+
+```bash
+ccache --clear
+sccache --stop-server
+rm -rf -- "${XDG_CACHE_HOME:-$HOME/.cache}/sccache"
+pip cache purge
+sudo apt-get clean
+```
+
 Writes compressed `rootfs.tar.zstd` in `$PWD`, replacing an existing archive:
 
 ```bash
@@ -340,6 +351,7 @@ Choose tools in any order:
 | `python-tldr` | Python and the tldr client |
 | `nanorc` | Nano and syntax highlighting |
 | `podman` | Podman, podman-compose, crun, conmon, fuse-overlayfs, and sudo wrappers for nested containers |
+| `sparky-extras` | Sparky APT repositories: core priority 90, testing 89 |
 
 Preview without installing:
 

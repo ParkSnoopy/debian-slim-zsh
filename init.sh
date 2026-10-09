@@ -37,6 +37,7 @@ AVAILABLE_TOPICS=(
 	python-tldr
 	nanorc
 	podman
+	sparky-extras
 )
 
 DEFAULT_TOPICS=(oh-my-zsh)
@@ -267,6 +268,16 @@ preview_topic() {
 			echo 'run/create defaults: --cgroups=disabled --network=host --log-driver=k8s-file --security-opt label=disable --security-opt apparmor=unconfined'
 			echo 'run also defaults to --rm; non-root podman passes through unchanged'
 			echo 'sudo podman-compose: use the Podman wrapper without pods or automatic container removal; non-root calls pass through unchanged'
+			;;
+		sparky-extras)
+			echo 'sudo apt install -y ca-certificates curl'
+			echo 'curl -fsSL https://repo.sparkylinux.org/sparky-repo.asc -o <tmp-key>'
+			echo 'sha256sum -c <pinned-key-checksum>'
+			echo 'sudo install -o root -g root -m 644 <tmp-key> /usr/share/keyrings/sparky-extras.asc'
+			echo 'sudo install -o root -g root -m 644 <tmp-sources> /etc/apt/sources.list.d/sparky-extras.sources'
+			echo 'sudo install -o root -g root -m 644 <tmp-preferences> /etc/apt/preferences.d/sparky-extras'
+			echo 'Sparky repositories: Signed-By key, core priority 90, testing priority 89; no distribution upgrade'
+			echo 'sudo apt update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/sparky-extras.sources -o Dir::Etc::sourceparts="" -o APT::Get::List-Cleanup=0 -o APT::Update::Error-Mode=any'
 			;;
 	esac
 }

@@ -85,10 +85,14 @@ These records do not track later user package installations.
 5. Each selected topic runs in a separate Bash process. Failed topics do not prevent later topics from running.
 6. The coordinator reports all failed topics and returns a nonzero status when any topic fails.
 
-Supported topics are `git-config`, `golang`, `oh-my-tmux`, `oh-my-zsh`, `python-uv`, `python-tldr`, `nanorc`, and `podman`.
+Supported topics are `git-config`, `golang`, `oh-my-tmux`, `oh-my-zsh`, `python-uv`, `python-tldr`, `nanorc`, `podman`, and `sparky-extras`.
 The default selection is `oh-my-zsh`.
 No topic requires another topic to run first. Each topic declares its own package dependencies.
 Keep the coordinator catalogue, previews, completion catalogue, topic files, and tests consistent.
+
+The [sparky-extras topic](../init.d/sparky-extras.topic) enables Sparky's `core` and `tiamat` repositories for Debian testing without installing a desktop or running a distribution upgrade.
+It checks the downloaded key's SHA-256, scopes trust through `Signed-By`, and pins Sparky release origins at priority `90` for `core` and `89` for `testing`, keeping normal Debian candidates preferred.
+After adding the source, it refreshes only Sparky indexes with list cleanup disabled; this is the repository-addition exception to the coordinator's single global refresh.
 
 Files in `init.d/` use `.topic`, but their interpreter remains Bash.
 CLI topic names do not include the extension.

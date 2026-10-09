@@ -8,6 +8,8 @@ export ROOT CHECK_DIR
 export HOME="$CHECK_DIR/home" TMPDIR="$CHECK_DIR/tmp" NO_COLOR=1
 export COMMAND_LOG="$CHECK_DIR/commands"
 export CURL_FAIL=false APT_FAIL=false UPDATE_INVALID=false UPDATE_HASH=b1ec88e
+export SPARKY_KEY_INVALID=false
+export SPARKY_REFRESH_FAIL=false
 export INIT_BASE_URL= INIT_GITHUB_REPOSITORY=
 unset INIT_GITHUB_BRANCH INIT_TARGET_SCRIPT
 mkdir -p "$HOME" "$TMPDIR"
@@ -16,18 +18,27 @@ touch "$COMMAND_LOG"
 # Controlled command fixtures: no package installation or upstream requests.
 sudo() {
 	echo "sudo $*" >> "$COMMAND_LOG"
+	if [ "$SPARKY_REFRESH_FAIL" = true ] && [[ "$*" == 'apt update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/sparky-extras.sources '* ]]; then
+		return 7
+	fi
 	if [ "$APT_FAIL" = true ]; then
 		case "$*" in
 			'apt install -y golang'|'apt install -y podman podman-compose crun conmon fuse-overlayfs') return 7 ;;
+			'apt install -y ca-certificates curl'|'apt update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/sparky-extras.sources '*) return 7 ;;
 		esac
 	fi
 	if [ "$1" = install ]; then
 		local -a args=("$@")
 		case "${args[-1]}" in
-			/usr/local/bin/podman|/usr/local/bin/podman-compose) ;;
+			/usr/local/bin/podman|/usr/local/bin/podman-compose)
+				command install -m 755 "${args[-2]}" "$CHECK_DIR/${args[-1]##*/}"
+				;;
+			/usr/share/keyrings/sparky-extras.asc|/etc/apt/sources.list.d/sparky-extras.sources|/etc/apt/preferences.d/sparky-extras)
+				mkdir -p "$CHECK_DIR$(dirname "${args[-1]}")"
+				command install -m 644 "${args[-2]}" "$CHECK_DIR${args[-1]}"
+				;;
 			*) return 64 ;;
 		esac
-		command install -m 755 "${args[-2]}" "$CHECK_DIR/${args[-1]##*/}"
 	fi
 }
 
@@ -51,6 +62,13 @@ curl() {
 	echo "curl $url" >> "$COMMAND_LOG"
 	[ "$CURL_FAIL" = false ] || return 23
 	case "$url" in
+		https://repo.sparkylinux.org/sparky-repo.asc)
+			if [ "$SPARKY_KEY_INVALID" = true ]; then
+				echo 'invalid test-only repository key' > "$output"
+			else
+				cp "$ROOT/tests/fixtures/sparky-repo.asc" "$output"
+			fi
+			;;
 		*/commits/*)
 			echo '{'
 			echo "  \"sha\": \"$UPDATE_HASH\","
@@ -87,28 +105,29 @@ run 0 --help
 run 0 install --help
 run 0 update --help
 run 0 --list
-[ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc\npodman' ]
+[ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc\npodman\nsparky-extras' ]
 while IFS= read -r topic; do
 	[ -f "$ROOT/init.d/$topic.topic" ]
 	grep -q "'$topic:" "$ROOT/src/_init.sh"
 done <<< "$OUTPUT"
 shopt -s nullglob
 topic_files=("$ROOT"/init.d/*.topic)
-[ "${#topic_files[@]}" -eq 8 ]
+[ "${#topic_files[@]}" -eq 9 ]
 legacy_topic_files=("$ROOT"/init.d/*.sh)
 [ "${#legacy_topic_files[@]}" -eq 0 ]
 run 0 install git-config golang git-config python-uv --exclude python-uv --dry-run
 [[ "$OUTPUT" == *'Preview topic: git-config'*'Preview topic: golang'* ]]
 [[ "$OUTPUT" != *'Preview topic: python-uv'* ]]
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic: git-config')" -eq 1 ]
-run 0 install podman nanorc python-tldr python-uv oh-my-zsh oh-my-tmux golang git-config --dry-run
-[[ "$OUTPUT" == *'Preview topic: podman'*'Preview topic: nanorc'*'Preview topic: python-tldr'*'Preview topic: python-uv'*'Preview topic: oh-my-zsh'*'Preview topic: oh-my-tmux'*'Preview topic: golang'*'Preview topic: git-config'* ]]
+run 0 install sparky-extras podman nanorc python-tldr python-uv oh-my-zsh oh-my-tmux golang git-config --dry-run
+[[ "$OUTPUT" == *'Preview topic: sparky-extras'*'Preview topic: podman'*'Preview topic: nanorc'*'Preview topic: python-tldr'*'Preview topic: python-uv'*'Preview topic: oh-my-zsh'*'Preview topic: oh-my-tmux'*'Preview topic: golang'*'Preview topic: git-config'* ]]
+[[ "$OUTPUT" == *'core priority 90, testing priority 89'*'Dir::Etc::sourceparts=""'* ]]
 [[ "$OUTPUT" == *'sudo apt install -y podman podman-compose crun conmon fuse-overlayfs'*'/usr/local/bin/podman'*'/usr/local/bin/podman-compose'* ]]
 run 0 --dry-run
 [[ "$OUTPUT" == *'Preview topic: oh-my-zsh'* ]]
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 1 ]
 run 0 install '*' --dry-run
-[ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 8 ]
+[ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 9 ]
 run 0 install '*' --exclude '*' --dry-run
 [ "$OUTPUT" = '' ]
 run 1 install unknown --dry-run
@@ -158,6 +177,33 @@ run 0 install podman -y
 cmp "$CHECK_DIR/podman" "$CHECK_DIR/podman-first"
 cmp "$CHECK_DIR/podman-compose" "$CHECK_DIR/podman-compose-first"
 
+APT_FAIL=true run 1 install sparky-extras -y
+CURL_FAIL=true run 1 install sparky-extras -y
+SPARKY_KEY_INVALID=true run 1 install sparky-extras -y
+[[ "$OUTPUT" == *'checksum did NOT match'*'Topic failed: sparky-extras'* ]]
+[ ! -e "$CHECK_DIR/usr/share/keyrings/sparky-extras.asc" ]
+[ ! -e "$CHECK_DIR/etc/apt/sources.list.d/sparky-extras.sources" ]
+
+: > "$COMMAND_LOG"
+run 0 install sparky-extras golang sparky-extras -y
+[[ "$OUTPUT" == *'Topic complete: sparky-extras'*'Topic complete: golang'* ]]
+[ "$(grep -cx 'sudo apt update' "$COMMAND_LOG")" -eq 1 ]
+[ "$(grep -c '^sudo apt update -o Dir::Etc::sourcelist=' "$COMMAND_LOG")" -eq 1 ]
+! grep -q ' upgrade' "$COMMAND_LOG"
+cmp "$ROOT/tests/fixtures/sparky-repo.asc" "$CHECK_DIR/usr/share/keyrings/sparky-extras.asc"
+cmp "$CHECK_DIR/etc/apt/sources.list.d/sparky-extras.sources" <(printf '%s\n' \
+	'Types: deb' 'URIs: https://repo.sparkylinux.org/' 'Suites: core tiamat' \
+	'Components: main' 'Signed-By: /usr/share/keyrings/sparky-extras.asc')
+cmp "$CHECK_DIR/etc/apt/preferences.d/sparky-extras" <(printf '%s\n' \
+	'Package: *' 'Pin: release o=SparkyLinux,a=core' 'Pin-Priority: 90' '' \
+	'Package: *' 'Pin: release o=SparkyLinux,a=testing' 'Pin-Priority: 89')
+run 0 install sparky-extras -y
+cmp "$ROOT/tests/fixtures/sparky-repo.asc" "$CHECK_DIR/usr/share/keyrings/sparky-extras.asc"
+SPARKY_KEY_INVALID=true run 1 install sparky-extras -y
+cmp "$ROOT/tests/fixtures/sparky-repo.asc" "$CHECK_DIR/usr/share/keyrings/sparky-extras.asc"
+SPARKY_REFRESH_FAIL=true run 1 install sparky-extras golang -y
+[[ "$OUTPUT" == *'Topic failed: sparky-extras'*'Topic complete: golang'*'Failed topics: sparky-extras'* ]]
+
 export INIT_BASE_URL=https://fixture.invalid/debian-slim-zsh
 export INIT_GITHUB_REPOSITORY=fixture/debian-slim-zsh
 run 0 install golang -y
@@ -167,6 +213,8 @@ run 0 install podman -y
 cmp "$CHECK_DIR/podman" "$CHECK_DIR/podman-first"
 cmp "$CHECK_DIR/podman-compose" "$CHECK_DIR/podman-compose-first"
 grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/podman.topic' "$COMMAND_LOG"
+run 0 install sparky-extras -y
+grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/sparky-extras.topic' "$COMMAND_LOG"
 CURL_FAIL=true run 1 install golang -y
 [[ "$OUTPUT" == *'Topic failed: golang'* ]]
 
@@ -185,7 +233,7 @@ UPDATE_INVALID=true UPDATE_HASH=2222222222222222222222222222222222222222 run 2 u
 cmp "$HOME/init.sh" <(sed 's/^CURRENT_COMMIT_HASH="[0-9a-f]*"/CURRENT_COMMIT_HASH="1111111"/' "$ROOT/init.sh")
 
 CURL_FAIL=true
-for topic in nanorc oh-my-zsh; do
+for topic in nanorc oh-my-zsh sparky-extras; do
 	status=0
 	bash "$ROOT/init.d/$topic.topic" >/dev/null 2>&1 || status=$?
 	[ "$status" -eq 23 ]

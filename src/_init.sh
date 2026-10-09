@@ -14,6 +14,7 @@ _init_sh() {
 		'python-tldr:Install tldr client'
 		'nanorc:Install syntax highlighting for Nano'
 		'podman:Install Podman, podman-compose, and sudo defaults for nested containers'
+		'sparky-extras:Enable Sparky core and testing repositories'
 		'\*:All available topics'
 	)
 

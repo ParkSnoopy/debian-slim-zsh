@@ -1,0 +1,40 @@
+#!/bin/env bash
+set -euo pipefail
+
+sudo apt install -y ca-certificates curl
+
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sparky-extras.XXXXXX")"
+trap 'rm -rf "$WORK_DIR"' EXIT
+
+curl --proto '=https' --tlsv1.2 -fsSL https://repo.sparkylinux.org/sparky-repo.asc -o "$WORK_DIR/sparky-extras.asc"
+# Sparky repository key: 2517567C137975AC92300A385CA76B26C40956B8.
+echo "f89766f7f5d0ff55d72b1319ac767be9ee1d1cb0be986abdd66413bff47a296a  $WORK_DIR/sparky-extras.asc" | sha256sum -c -
+
+cat > "$WORK_DIR/sparky-extras.sources" <<'EOF'
+Types: deb
+URIs: https://repo.sparkylinux.org/
+Suites: core tiamat
+Components: main
+Signed-By: /usr/share/keyrings/sparky-extras.asc
+EOF
+
+cat > "$WORK_DIR/sparky-extras.preferences" <<'EOF'
+Package: *
+Pin: release o=SparkyLinux,a=core
+Pin-Priority: 90
+
+Package: *
+Pin: release o=SparkyLinux,a=testing
+Pin-Priority: 89
+EOF
+
+sudo install -o root -g root -m 644 "$WORK_DIR/sparky-extras.asc" /usr/share/keyrings/sparky-extras.asc
+sudo install -o root -g root -m 644 "$WORK_DIR/sparky-extras.sources" /etc/apt/sources.list.d/sparky-extras.sources
+sudo install -o root -g root -m 644 "$WORK_DIR/sparky-extras.preferences" /etc/apt/preferences.d/sparky-extras
+
+# Refresh the new source only; the coordinator already refreshed Debian indexes.
+sudo apt update \
+  -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/sparky-extras.sources \
+  -o Dir::Etc::sourceparts="" \
+  -o APT::Get::List-Cleanup=0 \
+  -o APT::Update::Error-Mode=any
