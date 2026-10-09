@@ -247,7 +247,8 @@ Keep the source workspace running while creating the archive.
 This is not an atomic snapshot. Use application-specific backups for databases.
 
 Run these commands inside the source workspace as `admin`.
-The command writes `rootfs.tar` in the current directory after changing to `$HOME` and replaces any existing file with that name:
+This example assumes your current directory is the host-mounted project folder `/home/admin/workspace`.
+The command excludes `$PWD` and writes `rootfs.tar` there, replacing any existing file with that name:
 
 ```bash
 sudo tar \
@@ -265,18 +266,17 @@ sudo tar \
   --exclude='./package' \
   --exclude='./command' \
   --exclude='./etc/s6-overlay' \
-  --exclude='./home/admin/workspace' \
-  --exclude="./${PWD#/}/rootfs.tar" \
+  --exclude="./${PWD#/}" \
   -cpf rootfs.tar -C / .
 ```
 
 Container root creates the archive. The archive itself is excluded from the backup.
 Proceed only if the archive command exits successfully. A failed command can leave a partial archive.
 
-The runtime directories, `/tmp`, s6-overlay installation and service definitions, `/home/admin/workspace`, and the output archive are excluded by this command.
+The runtime directories, `/tmp`, s6-overlay installation and service definitions, and the current directory are excluded by this command.
 The replacement image supplies `/init`, `/package`, `/command`, and `/etc/s6-overlay`.
 Excluding all of `/package` also excludes s6-overlay's versioned dependencies, so old versions are not added alongside the replacement's files.
-Project files at `/home/admin/workspace` remain in the host folder and are available whenever the same bind mount is attached.
+Project files in `$PWD` remain in the host folder and are available whenever the same bind mount is attached.
 The bind mount is not a separate backup of those files.
 Other mounts are traversed, including home volumes, nested Podman storage, and project folders mounted elsewhere.
 Symbolic links are stored as links, not followed.
@@ -298,19 +298,21 @@ A readable archive alone does not prove that application data is consistent.
 Create a fresh container from the image you want to keep.
 Use the same architecture and compatible user mapping as the source.
 Do not attach existing data volumes or project folders at other paths during restoration: archive writes would also change those mounts.
-The project bind mount at `/home/admin/workspace` is excluded from restoration and can be reused.
-On the host, start the replacement without a backup mount:
+Run restoration from the same guest project path as the source; `$PWD` is excluded and that project bind mount can be reused.
+On the host, run this from the same project folder to start the replacement without a backup mount:
 
 ```bash
 podman run -it --hostname debian-restored --name debian-restored \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
+  --volume "$PWD:/home/admin/workspace" \
+  --workdir /home/admin/workspace \
   ghcr.io/parksnoopy/debian-slim-zsh:latest
 ```
 
-From another host terminal, copy the archive out of the source and into the replacement:
+From another host terminal in a directory outside the shared project folder, copy the archive out of the source and into the replacement:
 
 ```bash
-podman cp debian-workspace:/home/admin/rootfs.tar rootfs.tar
+podman cp debian-workspace:/home/admin/workspace/rootfs.tar rootfs.tar
 podman cp rootfs.tar debian-restored:/tmp/rootfs.tar
 ```
 
@@ -318,7 +320,7 @@ For a full workspace, use its launch options with a different container name and
 Leave other host project folders unmounted until restoration is complete.
 Stop any application writers or inner containers in the replacement before restoring.
 
-Run the following commands inside the replacement as `admin`, whose `$HOME` must match the archived home path.
+Run the following commands inside the replacement as `admin`, with `$PWD` at the same guest project path as the source and `$HOME` matching the archived home path.
 First restore missing files outside home, without changing existing files or directory metadata:
 
 ```bash
@@ -335,6 +337,7 @@ sudo tar \
   --exclude='./package' \
   --exclude='./command' \
   --exclude='./etc/s6-overlay' \
+  --exclude="./${PWD#/}" \
   --exclude="./${HOME#/}" \
   -xpf /tmp/rootfs.tar \
   -C /
@@ -351,7 +354,7 @@ sudo tar \
   --xattrs-exclude='security.selinux' \
   --numeric-owner \
   --sparse \
-  --exclude='./home/admin/workspace' \
+  --exclude="./${PWD#/}" \
   -xpf /tmp/rootfs.tar \
   -C / "./${HOME#/}"
 ```
