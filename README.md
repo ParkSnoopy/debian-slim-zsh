@@ -260,6 +260,11 @@ sudo tar \
   --exclude='./sys' \
   --exclude='./dev' \
   --exclude='./run' \
+  --exclude='./tmp' \
+  --exclude='./init' \
+  --exclude='./package' \
+  --exclude='./command' \
+  --exclude='./etc/s6-overlay' \
   --exclude='./home/admin/workspace' \
   --exclude="./${PWD#/}/rootfs.tar" \
   -cpf rootfs.tar -C / .
@@ -268,7 +273,9 @@ sudo tar \
 Container root creates the archive. The archive itself is excluded from the backup.
 Proceed only if the archive command exits successfully. A failed command can leave a partial archive.
 
-The runtime directories, `/home/admin/workspace`, and the output archive are excluded by this command.
+The runtime directories, `/tmp`, s6-overlay installation and service definitions, `/home/admin/workspace`, and the output archive are excluded by this command.
+The replacement image supplies `/init`, `/package`, `/command`, and `/etc/s6-overlay`.
+Excluding all of `/package` also excludes s6-overlay's versioned dependencies, so old versions are not added alongside the replacement's files.
 Project files at `/home/admin/workspace` remain in the host folder and are available whenever the same bind mount is attached.
 The bind mount is not a separate backup of those files.
 Other mounts are traversed, including home volumes, nested Podman storage, and project folders mounted elsewhere.
@@ -323,6 +330,11 @@ sudo tar \
   --numeric-owner \
   --sparse \
   --skip-old-files \
+  --exclude='./tmp' \
+  --exclude='./init' \
+  --exclude='./package' \
+  --exclude='./command' \
+  --exclude='./etc/s6-overlay' \
   --exclude="./${HOME#/}" \
   -xpf /tmp/rootfs.tar \
   -C /
