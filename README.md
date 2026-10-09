@@ -206,10 +206,12 @@ Full container migration is not runtime-verified.
 Inside the running source container as `admin`, from `/home/admin/workspace`.
 Stop application writers and all inner containers; do not change packages during backup.
 This is not an atomic snapshot; back up databases separately.
-Writes `rootfs.tar` in `$PWD`, replacing an existing archive:
+Install `zstd` in both containers first: `sudo apt-get update && sudo apt-get install -y zstd`.
+Writes compressed `rootfs.tar.zstd` in `$PWD`, replacing an existing archive:
 
 ```bash
 sudo tar \
+  -I 'zstd -1' \
   --acls \
   --xattrs \
   --xattrs-include='*' \
@@ -224,8 +226,11 @@ sudo tar \
   --exclude='./package' \
   --exclude='./command' \
   --exclude='./etc/s6-overlay' \
+  --exclude='./etc/hostname' \
+  --exclude='./etc/resolv.conf' \
+  --exclude='./etc/hosts' \
   --exclude="./${PWD#/}" \
-  -cpf rootfs.tar -C / .
+  -cpf rootfs.tar.zstd -C / .
 ```
 
 Excludes runtime paths, s6-overlay and its bundled dependencies, and `$PWD` including the archive.
@@ -234,7 +239,7 @@ Host project files remain outside the archive; the bind mount is not a backup.
 Keep the archive private and inspect it only after successful creation:
 
 ```bash
-sudo tar -tf rootfs.tar
+sudo tar --zstd -tf rootfs.tar.zstd
 ```
 
 ### Restore into a replacement
@@ -253,13 +258,14 @@ podman run -it --hostname debian-restored --name debian-restored \
 For desktop/nested access, reuse the full launch options with a new name and fresh data volumes.
 Do not attach existing data volumes or other project mounts: restoration writes through them.
 Inside as `admin`, stop application writers and inner containers.
-Assumes `$PWD` is `/home/admin/workspace`, contains `rootfs.tar`, and matches the source project path; `$HOME` must also match.
+Assumes `$PWD` is `/home/admin/workspace`, contains `rootfs.tar.zstd`, and matches the source project path; `$HOME` must also match.
 Run each pass only after the previous command succeeds.
 
 **1. Add missing system files:**
 
 ```bash
 sudo tar \
+  --zstd \
   --acls \
   --xattrs \
   --xattrs-include='*' \
@@ -272,16 +278,20 @@ sudo tar \
   --exclude='./package' \
   --exclude='./command' \
   --exclude='./etc/s6-overlay' \
+  --exclude='./etc/hostname' \
+  --exclude='./etc/resolv.conf' \
+  --exclude='./etc/hosts' \
   --exclude="./${PWD#/}" \
   --exclude="./${HOME#/}" \
-  -xpf rootfs.tar \
+  -xpf rootfs.tar.zstd \
   -C /
 ```
 
-**2. Replace Debian package files, configuration, and APT/dpkg state together:**
+**2. Replace Debian package files, configuration, APT/dpkg state, and home files:**
 
 ```bash
 sudo tar \
+  --zstd \
   --acls \
   --xattrs \
   --xattrs-include='*' \
@@ -289,29 +299,16 @@ sudo tar \
   --numeric-owner \
   --sparse \
   --exclude='./etc/s6-overlay' \
+  --exclude='./etc/hostname' \
+  --exclude='./etc/resolv.conf' \
+  --exclude='./etc/hosts' \
   --exclude='./usr/local' \
   --exclude="./${PWD#/}" \
-  --exclude="./${HOME#/}" \
-  -xpf rootfs.tar \
-  -C / ./bin ./sbin ./lib ./usr ./etc ./var
+  -xpf rootfs.tar.zstd \
+  -C / ./bin ./sbin ./lib ./usr ./etc ./var "./${HOME#/}"
 ```
 
 Uses archived package versions, not the replacement's newer packages; this is not a clean rollback.
-
-**3. Replace archived home files, excluding the project directory:**
-
-```bash
-sudo tar \
-  --acls \
-  --xattrs \
-  --xattrs-include='*' \
-  --xattrs-exclude='security.selinux' \
-  --numeric-owner \
-  --sparse \
-  --exclude="./${PWD#/}" \
-  -xpf rootfs.tar \
-  -C / "./${HOME#/}"
-```
 
 Check `dpkg --audit` and `sudo apt-get check` before package changes, then restart and verify files, ownership, sudo, and required tools.
 ACLs/xattrs need compatible filesystems, mappings, and policies; verify metadata warnings even if tar exits successfully.
