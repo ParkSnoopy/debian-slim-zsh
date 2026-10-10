@@ -21,7 +21,7 @@
 #[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
 # Rust
-#source "$HOME/.cargo/env"
+#export PATH="$PATH:$HOME/.cargo/env"
 
 # GoLang
 #export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin"
