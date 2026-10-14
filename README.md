@@ -3,6 +3,18 @@
 A small Debian testing workspace with zsh, tmux, and sudo.
 Based on [ubuntu-slim-zsh](https://github.com/ParkSnoopy/ubuntu-slim-zsh).
 
+## Requirements
+
+- Linux `amd64`/x86-64 host or Linux VM; the published image is `linux/amd64`.
+- Podman and an OCI runtime; `crun` is required for `--group-add keep-groups` examples.
+- Rootless mode: enabled user namespaces, `newuidmap`/`newgidmap`, and subordinate ranges for your user in `/etc/subuid` and `/etc/subgid`.
+- Working Podman storage on a local filesystem and its configured rootless network helper (`pasta` or `slirp4netns`).
+
+See [Podman's rootless prerequisites](https://docs.podman.io/en/latest/markdown/podman.1.html#rootless-mode) for host setup.
+Keep `/init` as PID 1: do not add `--init` or `--pid=host`, or override startup with a non-root user.
+With `keep-id`, use `--user=0:0` for initialization; the shell drops to `admin`.
+Desktop sockets, devices, FUSE, and extra capabilities are only needed for their corresponding examples below.
+
 ## Start a workspace
 
 These examples use rootless Podman on Linux.
@@ -88,6 +100,31 @@ podman start -ai debian-dev
 ```
 
 Packages and home files remain until container removal; examples omit `--rm`.
+
+### Empty-command startup error
+
+If crun reports `cannot find` with an empty command, inspect the local image and failed container (substitute its name):
+
+```bash
+podman --version
+crun --version
+type podman
+podman image inspect ghcr.io/parksnoopy/debian-slim-zsh:latest \
+  --format 'Entrypoint={{json .Config.Entrypoint}} Cmd={{json .Config.Cmd}}'
+podman inspect debian-dev --format 'Path={{json .Path}} Args={{json .Args}}'
+```
+
+Expected entrypoint/Path: `/init`; command/Args: `/usr/local/bin/as-admin /usr/bin/zsh -l`.
+Changing UID mappings does not supply a missing command.
+Check aliases/wrappers and startup overrides if local values differ; re-pull the published tag if the local image metadata differs.
+For a disposable test with explicit startup:
+
+```bash
+podman run --rm -it --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
+  --entrypoint /init \
+  ghcr.io/parksnoopy/debian-slim-zsh:latest \
+  /usr/local/bin/as-admin /usr/bin/zsh -l
+```
 
 ## Share a project folder
 
