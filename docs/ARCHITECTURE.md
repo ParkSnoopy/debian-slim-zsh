@@ -189,7 +189,7 @@ The wrapper does not rewrite Compose services, networks, ports, or resource limi
 ### Nested Podman
 
 Nested Podman can run rootless as admin. Sudo is not an inherent requirement.
-The [README's manual example](../README.md#run-nested-podman) instead runs the guest engine as container root through sudo inside a rootless outer container.
+The [manual nested-Podman example](USER_HELP.md#podman-in-podman) instead runs the guest engine as container root through sudo inside a rootless outer container.
 That example is unverified and does not implement the planned admin-rootless engine below.
 
 Admin's rootless mode requires working `newuidmap` and `newgidmap` helpers and valid guest subordinate UID/GID ranges.
