@@ -13,6 +13,7 @@
 #export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 
 # Bun
+#[ -s "/home/admin/.bun/_bun" ] && source "/home/admin/.bun/_bun"
 #export BUN_INSTALL="$HOME/.bun"
 #export PATH="$BUN_INSTALL/bin:$PATH"
 
@@ -31,7 +32,8 @@
 # Environment
 export TZ="${TZ:-Asia/Seoul}"
 export LANG="${LANG:-en_US.UTF-8}"
+export TAR_OPTIONS="--no-same-owner"
+
+# DeDup PATH and Prepend Local bin
 typeset -U path PATH
 path=("$HOME/.local/bin" $path)
-
-export TAR_OPTIONS="--no-same-owner"
