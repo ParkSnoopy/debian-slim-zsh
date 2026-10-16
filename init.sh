@@ -39,6 +39,7 @@ AVAILABLE_TOPICS=(
 	podman
 	sparky-extras
 	display-clients
+	rust
 )
 
 DEFAULT_TOPICS=(oh-my-zsh)
@@ -143,11 +144,24 @@ self_update() (
 	local next_zshenv
 	local reply
 	local target_script
+	local update_ready=false
+	local status
 
 	target_script="${INIT_TARGET_SCRIPT:-$HOME/init.sh}"
 	next_script=
 	next_zshenv=
-	trap 'rm -f "$next_script" "$next_zshenv"' EXIT
+	trap '
+		status=$?
+		if [ "$status" -eq 0 ] && [ "$update_ready" = true ]; then
+			if install -m 755 "$next_script" "$target_script"; then
+				say_success "Already up to date (${latest_short_hash}): $target_script"
+			else
+				status=$?
+			fi
+		fi
+		rm -f "$next_script" "$next_zshenv"
+		exit "$status"
+	' EXIT
 
 	say_info "Checking ${GITHUB_REPOSITORY}@${GITHUB_BRANCH}"
 	latest_json="$(curl --proto '=https' --tlsv1.2 -fsSL "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_BRANCH}")"
@@ -170,11 +184,10 @@ self_update() (
 		chmod +x "$next_script"
 		bash -n "$next_script"
 		sed -i "s/^CURRENT_COMMIT_HASH=\"[0-9a-f]*\"/CURRENT_COMMIT_HASH=\"$latest_short_hash\"/" "$next_script"
-		install -m 755 "$next_script" "$target_script"
+		update_ready=true
 		if [ -d /usr/local/share/zsh/site-functions ] && [ -w /usr/local/share/zsh/site-functions ]; then
 			curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/src/_init.sh" -o /usr/local/share/zsh/site-functions/_init.sh 2>/dev/null || true
 		fi
-		say_success "Updated $target_script to ${latest_short_hash}."
 	fi
 
 	printf 'Update %s/.zshenv? [y/N] ' "$HOME"
@@ -256,6 +269,11 @@ preview_topic() {
 			;;
 		golang)
 			echo 'sudo apt install -y golang'
+			;;
+		rust)
+			echo 'sudo apt install -y ca-certificates curl'
+			echo "curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs -o <tmp-installer>"
+			echo 'sh <tmp-installer> -y --default-toolchain stable --profile complete --target x86_64-unknown-linux-gnu --no-modify-path'
 			;;
 		oh-my-tmux)
 			echo 'sudo apt install -y git gnu-which tmux zsh'

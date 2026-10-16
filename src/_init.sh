@@ -16,6 +16,7 @@ _init_sh() {
 		'podman:Install Podman, podman-compose, and sudo defaults for nested containers'
 		'sparky-extras:Enable Sparky core and testing repositories'
 		'display-clients:Install Wayland and X11 client libraries'
+		'rust:Install stable Rust with the complete profile without PATH changes'
 		'\*:All available topics'
 	)
 

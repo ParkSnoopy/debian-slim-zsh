@@ -10,6 +10,7 @@ export COMMAND_LOG="$CHECK_DIR/commands"
 export CURL_FAIL=false APT_FAIL=false UPDATE_INVALID=false UPDATE_HASH=b1ec88e
 export SPARKY_KEY_INVALID=false
 export SPARKY_REFRESH_FAIL=false
+export RUSTUP_STATUS=0
 export INIT_BASE_URL= INIT_GITHUB_REPOSITORY=
 unset INIT_GITHUB_BRANCH INIT_TARGET_SCRIPT
 mkdir -p "$HOME" "$TMPDIR"
@@ -63,6 +64,12 @@ curl() {
 	echo "curl $url" >> "$COMMAND_LOG"
 	[ "$CURL_FAIL" = false ] || return 23
 	case "$url" in
+		https://sh.rustup.rs)
+			printf '%s\n' 'printf "%s\0" "$@" > "$CHECK_DIR/rustup-argv"' \
+				'printf "%s\n" "$PATH" > "$CHECK_DIR/rustup-path"' \
+				'echo "rustup-init $*" >> "$COMMAND_LOG"' \
+				'exit "$RUSTUP_STATUS"' > "$output"
+			;;
 		https://repo.sparkylinux.org/sparky-repo.asc)
 			if [ "$SPARKY_KEY_INVALID" = true ]; then
 				echo 'invalid test-only repository key' > "$output"
@@ -106,22 +113,23 @@ run 0 --help
 run 0 install --help
 run 0 update --help
 run 0 --list
-[ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc\npodman\nsparky-extras\ndisplay-clients' ]
+[ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc\npodman\nsparky-extras\ndisplay-clients\nrust' ]
 while IFS= read -r topic; do
 	[ -f "$ROOT/init.d/$topic.topic" ]
 	grep -q "'$topic:" "$ROOT/src/_init.sh"
 done <<< "$OUTPUT"
 shopt -s nullglob
 topic_files=("$ROOT"/init.d/*.topic)
-[ "${#topic_files[@]}" -eq 10 ]
+[ "${#topic_files[@]}" -eq 11 ]
 legacy_topic_files=("$ROOT"/init.d/*.sh)
 [ "${#legacy_topic_files[@]}" -eq 0 ]
 run 0 install git-config golang git-config python-uv --exclude python-uv --dry-run
 [[ "$OUTPUT" == *'Preview topic: git-config'*'Preview topic: golang'* ]]
 [[ "$OUTPUT" != *'Preview topic: python-uv'* ]]
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic: git-config')" -eq 1 ]
-run 0 install display-clients sparky-extras podman nanorc python-tldr python-uv oh-my-zsh oh-my-tmux golang git-config --dry-run
-[[ "$OUTPUT" == *'Preview topic: display-clients'*'Preview topic: sparky-extras'*'Preview topic: podman'*'Preview topic: nanorc'*'Preview topic: python-tldr'*'Preview topic: python-uv'*'Preview topic: oh-my-zsh'*'Preview topic: oh-my-tmux'*'Preview topic: golang'*'Preview topic: git-config'* ]]
+run 0 install rust display-clients sparky-extras podman nanorc python-tldr python-uv oh-my-zsh oh-my-tmux golang git-config --dry-run
+[[ "$OUTPUT" == *'Preview topic: rust'*'Preview topic: display-clients'*'Preview topic: sparky-extras'*'Preview topic: podman'*'Preview topic: nanorc'*'Preview topic: python-tldr'*'Preview topic: python-uv'*'Preview topic: oh-my-zsh'*'Preview topic: oh-my-tmux'*'Preview topic: golang'*'Preview topic: git-config'* ]]
+[[ "$OUTPUT" == *'--default-toolchain stable --profile complete --target x86_64-unknown-linux-gnu --no-modify-path'* ]]
 [[ "$OUTPUT" == *'sudo apt install -y --no-install-recommends libwayland-client0 libx11-6'* ]]
 [[ "$OUTPUT" == *'core priority 90, testing priority 89'*'Dir::Etc::sourceparts=""'* ]]
 [[ "$OUTPUT" == *'sudo apt install -y podman podman-compose crun conmon fuse-overlayfs'*'/usr/local/bin/podman'*'/usr/local/bin/podman-compose'* ]]
@@ -129,7 +137,7 @@ run 0 --dry-run
 [[ "$OUTPUT" == *'Preview topic: oh-my-zsh'* ]]
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 1 ]
 run 0 install '*' --dry-run
-[ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 10 ]
+[ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 11 ]
 run 0 install '*' --exclude '*' --dry-run
 [ "$OUTPUT" = '' ]
 run 1 install unknown --dry-run
@@ -171,6 +179,23 @@ run 0 install python-tldr python-uv -y
 run 0 install python-uv python-tldr -y
 [[ "$OUTPUT" == *'Topic complete: python-uv'*'Topic complete: python-tldr'* ]]
 ! grep -q '^curl ' "$COMMAND_LOG"
+
+printf '%s\n' 'fixture shell configuration' > "$HOME/.profile"
+run 0 install rust rust -y
+[[ "$OUTPUT" == *'Topic complete: rust'* ]]
+cmp "$CHECK_DIR/rustup-argv" <(printf '%s\0' -y --default-toolchain stable --profile complete --target x86_64-unknown-linux-gnu --no-modify-path)
+cmp "$CHECK_DIR/rustup-path" <(printf '%s\n' "$PATH")
+[ "$(grep -c '^rustup-init ' "$COMMAND_LOG")" -eq 1 ]
+: > "$COMMAND_LOG"
+APT_FAIL=true run 1 install rust -y
+! grep -q '^curl ' "$COMMAND_LOG"
+CURL_FAIL=true run 1 install rust -y
+! grep -q '^rustup-init ' "$COMMAND_LOG"
+RUSTUP_STATUS=37 run 1 install rust golang -y
+[[ "$OUTPUT" == *'Topic failed: rust'*'Topic complete: golang'*'Failed topics: rust'* ]]
+[ "$(grep -c '^rustup-init ' "$COMMAND_LOG")" -eq 1 ]
+cmp "$HOME/.profile" <(printf '%s\n' 'fixture shell configuration')
+[ ! -e "$HOME/.zshenv" ]
 
 APT_FAIL=true run 1 install podman -y
 [ ! -e "$CHECK_DIR/podman" ]
@@ -222,6 +247,9 @@ grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/golang.topic' "$CO
 run 0 install display-clients -y
 [[ "$OUTPUT" == *'Topic complete: display-clients'* ]]
 grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/display-clients.topic' "$COMMAND_LOG"
+run 0 install rust -y
+[[ "$OUTPUT" == *'Topic complete: rust'* ]]
+grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/rust.topic' "$COMMAND_LOG"
 run 0 install podman -y
 cmp "$CHECK_DIR/podman" "$CHECK_DIR/podman-first"
 cmp "$CHECK_DIR/podman-compose" "$CHECK_DIR/podman-compose-first"
@@ -245,8 +273,27 @@ OUTPUT="$(bash "$HOME/init.sh" install golang -y 2>&1)"
 UPDATE_INVALID=true UPDATE_HASH=2222222222222222222222222222222222222222 run 2 update
 cmp "$HOME/init.sh" <(sed 's/^CURRENT_COMMIT_HASH="[0-9a-f]*"/CURRENT_COMMIT_HASH="1111111"/' "$ROOT/init.sh")
 
+cp "$ROOT/init.sh" "$CHECK_DIR/self-init.sh"
+OUTPUT="$(UPDATE_HASH=2222222222222222222222222222222222222222 INIT_TARGET_SCRIPT="$CHECK_DIR/self-init.sh" bash "$CHECK_DIR/self-init.sh" update </dev/null 2>&1)"
+[[ "$OUTPUT" == *'Skipped '*'Already up to date (2222222)'* ]]
+cmp "$CHECK_DIR/self-init.sh" <(sed 's/^CURRENT_COMMIT_HASH="[0-9a-f]*"/CURRENT_COMMIT_HASH="2222222"/' "$ROOT/init.sh")
+: > "$COMMAND_LOG"
+OUTPUT="$(UPDATE_HASH=2222222222222222222222222222222222222222 INIT_TARGET_SCRIPT="$CHECK_DIR/self-init.sh" bash "$CHECK_DIR/self-init.sh" update </dev/null 2>&1)"
+[[ "$OUTPUT" == *'Already up to date (2222222)'* ]]
+! grep -q '/init.sh$' "$COMMAND_LOG"
+
+status=0
+OUTPUT="$(UPDATE_HASH=3333333333333333333333333333333333333333 INIT_TARGET_SCRIPT="$CHECK_DIR/missing/init.sh" bash "$CHECK_DIR/self-init.sh" update </dev/null 2>&1)" || status=$?
+[ "$status" -ne 0 ]
+[[ "$OUTPUT" != *'Already up to date'* ]]
+cmp "$CHECK_DIR/self-init.sh" <(sed 's/^CURRENT_COMMIT_HASH="[0-9a-f]*"/CURRENT_COMMIT_HASH="2222222"/' "$ROOT/init.sh")
+OUTPUT="$(echo y | UPDATE_HASH=3333333333333333333333333333333333333333 INIT_TARGET_SCRIPT="$CHECK_DIR/self-init.sh" bash "$CHECK_DIR/self-init.sh" update 2>&1)"
+[[ "$OUTPUT" == *"Updated $HOME/.zshenv."*'Already up to date (3333333)'* ]]
+cmp "$CHECK_DIR/self-init.sh" <(sed 's/^CURRENT_COMMIT_HASH="[0-9a-f]*"/CURRENT_COMMIT_HASH="3333333"/' "$ROOT/init.sh")
+cmp "$ROOT/src/.zshenv" "$HOME/.zshenv"
+
 CURL_FAIL=true
-for topic in nanorc oh-my-zsh sparky-extras; do
+for topic in nanorc oh-my-zsh sparky-extras rust; do
 	status=0
 	bash "$ROOT/init.d/$topic.topic" >/dev/null 2>&1 || status=$?
 	[ "$status" -eq 23 ]

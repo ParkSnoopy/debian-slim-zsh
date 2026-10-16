@@ -85,7 +85,7 @@ These records do not track later user package installations.
 5. Each selected topic runs in a separate Bash process. Failed topics do not prevent later topics from running.
 6. The coordinator reports all failed topics and returns a nonzero status when any topic fails.
 
-Supported topics are `git-config`, `golang`, `oh-my-tmux`, `oh-my-zsh`, `python-uv`, `python-tldr`, `nanorc`, `podman`, `sparky-extras`, and `display-clients`.
+Supported topics are `git-config`, `golang`, `oh-my-tmux`, `oh-my-zsh`, `python-uv`, `python-tldr`, `nanorc`, `podman`, `sparky-extras`, `display-clients`, and `rust`.
 The default selection is `oh-my-zsh`.
 No topic requires another topic to run first. Each topic declares its own package dependencies.
 Keep the coordinator catalogue, previews, completion catalogue, topic files, and tests consistent.
@@ -93,6 +93,11 @@ Keep the coordinator catalogue, previews, completion catalogue, topic files, and
 The [display-clients topic](../init.d/display-clients.topic) installs `libwayland-client0` and `libx11-6` without recommended packages.
 These libraries remain outside the base image and default topic selection.
 The topic does not install a display server or set a display backend.
+
+The [rust topic](../init.d/rust.topic) stages the official rustup installer before running it as the current user.
+It selects the `stable` toolchain, `complete` profile, and `x86_64-unknown-linux-gnu` target with `--no-modify-path`.
+It does not edit PATH or shell configuration, or source Cargo's environment file.
+Unavailable components in the complete profile fail the topic without falling back to another profile.
 
 The [sparky-extras topic](../init.d/sparky-extras.topic) enables Sparky's `core` and `tiamat` repositories for Debian testing without installing a desktop or running a distribution upgrade.
 It checks the downloaded key's SHA-256, scopes trust through `Signed-By`, and pins Sparky release origins at priority `90` for `core` and `89` for `testing`, keeping normal Debian candidates preferred.
@@ -110,6 +115,8 @@ Self-update defaults to `ParkSnoopy/debian-slim-zsh` on `main`, with raw downloa
 An explicit `INIT_BASE_URL` overrides the raw download location.
 The derived update URL applies only to self-update. It does not change local topic installation into remote execution.
 Self-update checks Bash syntax before replacing the coordinator and asks before replacing the user's shell environment.
+It stages the coordinator with the fetched commit hash and replaces `~/init.sh` through an EXIT trap after the update flow succeeds.
+The trap reports up-to-date status only after replacement succeeds and cleans staged files on success or failure.
 It does not replace the bundled topic directory.
 Remote topic downloads still require `INIT_BASE_URL` on subsequent calls.
 
