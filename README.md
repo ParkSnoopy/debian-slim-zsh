@@ -15,7 +15,31 @@ Keep `/init` as PID 1: do not add `--init` or `--pid=host`, or override startup 
 With `keep-id`, use `--user=0:0` for initialization; the shell drops to `admin`.
 Desktop sockets, devices, FUSE, and extra capabilities are only needed for their corresponding examples below.
 
-## Start a workspace
+## Table of Content
+
+- [Requirements](#requirements)
+- [Start a workspace](#start-a-workspace)
+  - [Users and file ownership](#users-and-file-ownership)
+    - [Full desktop and nested-container workspace](#full-desktop-and-nested-container-workspace)
+      - [Wayland](#wayland)
+      - [X11](#x11)
+    - [Minimal bare container](#minimal-bare-container)
+      - [Empty-command startup error](#empty-command-startup-error)
+    - [Share a project folder](#share-a-project-folder)
+    - [Allow access to `/dev/fuse`](#allow-access-to-devfuse)
+    - [Run nested Podman](#run-nested-podman)
+- [Back up and migrate](#back-up-and-migrate)
+  - [Archive the workspace](#archive-the-workspace)
+  - [Restore into a replacement](#restore-into-a-replacement)
+- [Install your preferred tools](#install-your-preferred-tools)
+
+# Start a workspace
+
+> [!NOTE]
+> Always pass `/usr/local/bin/as-admin <entrypoint command>` after the image name in the launch examples below.
+> Do not pass only `<entrypoint command>` or omit the command from these examples.
+> The helper runs the command as `admin` and sets its home and runtime environment.
+> Keep `/init` as the container's entrypoint; the appended command does not replace `/init`.
 
 These examples use rootless Podman on Linux.
 [GitHub Actions](.github/workflows/deploy-image.yaml) builds and publishes the image to GHCR after its checks pass.
@@ -25,16 +49,39 @@ Pull the latest image:
 podman pull ghcr.io/parksnoopy/debian-slim-zsh:latest
 ```
 
+## Users and file ownership
+
+For host-rootless Podman:
+
+| Option | Meaning |
+| --- | --- |
+| `--userns=keep-id:uid=1000,gid=1000` | Maps your host user and primary group to the container's `admin` account at `1000:1000` |
+| `--user=0:0` | Starts container initialization as container root, not host root |
+
+The shell runs as `admin`; ordinary bind mounts use these host owners:
+
+| Who creates a file in the workspace? | Owner shown on the host |
+| --- | --- |
+| `admin` | Your host user |
+| Container root, including commands run through `sudo` | A subordinate host UID, not host root |
+
+Use `admin` for project files to avoid subordinate-UID ownership.
+Extra ownership/ID-mapping options or host `sudo podman` change these rules.
+
 ### Full desktop and nested-container workspace
 
 Run from your host project directory without `sudo`.
-Requires crun, rootless UID/GID mappings, device permissions, and Wayland/PipeWire sockets.
-Set `XDG_RUNTIME_DIR` to your session directory; `WAYLAND_DISPLAY` defaults to `wayland-0`.
+Requires crun, rootless UID/GID mappings, device permissions, and the selected display and PipeWire/PulseAudio sockets.
+Set `XDG_RUNTIME_DIR` to your host session directory.
 Remove unavailable devices, sockets, and associated environment options, including `/dev/accel` if absent.
 
 > [!CAUTION]
 > Trusted code only: isolation is relaxed and host devices/services are exposed, even through read-only sockets.
 > This complete rootless configuration is not runtime-verified.
+
+#### Wayland
+
+The host must run a Wayland compositor; `WAYLAND_DISPLAY` defaults to `wayland-0`.
 
 ```bash
 podman run -it \
@@ -70,7 +117,53 @@ podman run -it \
   /usr/local/bin/as-admin /usr/bin/tmux -2u
 ```
 
-Install required drivers, libraries, and clients separately.
+#### X11
+
+Use a local Unix display such as `DISPLAY=:0`, not an SSH-forwarded TCP display.
+Set `XAUTHORITY` to the host authority file for that display.
+The container uses the host's `HOSTNAME` so local Xauthority entries match.
+The container receives the display socket and authority file.
+Do not disable X11 access control with `xhost +`.
+
+```bash
+podman run -it \
+  --hostname "${HOSTNAME:?Set HOSTNAME to your host hostname}" \
+  --name debian-workspace \
+  --runtime crun \
+  --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
+  --group-add keep-groups \
+  --workdir /home/admin/workspace \
+  --volume debian-workspace-home:/home/admin \
+  --volume "$PWD:/home/admin/workspace" \
+  --volume debian-workspace-storage:/var/lib/containers \
+  --mount 'type=bind,src=/tmp/.X11-unix,dst=/tmp/.X11-unix,ro=true' \
+  --mount "type=bind,src=${XAUTHORITY:?Set XAUTHORITY to your X11 authority file},dst=/run/user/1000/Xauthority,ro=true" \
+  --mount "type=bind,src=${XDG_RUNTIME_DIR:?Set XDG_RUNTIME_DIR}/pipewire-0,dst=/run/user/1000/pipewire-0,ro=true" \
+  --mount "type=bind,src=${XDG_RUNTIME_DIR}/pulse/native,dst=/run/user/1000/pulse/native,ro=true" \
+  --env "DISPLAY=${DISPLAY:?Set DISPLAY}" \
+  --env XAUTHORITY=/run/user/1000/Xauthority \
+  --env GDK_BACKEND=x11 \
+  --env QT_QPA_PLATFORM=xcb \
+  --env PIPEWIRE_REMOTE=pipewire-0 \
+  --env PULSE_SERVER=unix:/run/user/1000/pulse/native \
+  --device /dev/dri \
+  --device /dev/accel \
+  --device /dev/snd \
+  --device /dev/net/tun \
+  --device /dev/fuse \
+  --cap-add NET_ADMIN \
+  --cap-add SYS_ADMIN \
+  --cap-add MKNOD \
+  --security-opt label=disable \
+  --security-opt apparmor=unconfined \
+  --security-opt unmask=ALL \
+  ghcr.io/parksnoopy/debian-slim-zsh:latest \
+  /usr/local/bin/as-admin /usr/bin/tmux -2u
+```
+
+Choose one display example; both use the same container name and volumes.
+Inside the workspace, install the shared client libraries with `~/init.sh install display-clients`.
+Install application-specific drivers, toolkits, and clients separately; the topic does not provide a display server.
 Default seccomp remains enabled; `NET_ADMIN` affects only the workspace network.
 For nested containers, [install the Podman topic and use its sudo wrapper](#run-nested-podman).
 
@@ -82,14 +175,15 @@ Resume a stopped workspace with `podman start -ai debian-workspace`.
 Packages persist until container removal; named home/storage volumes survive removal.
 Reuse volumes with the same user mapping and storage configuration.
 
-## Minimal bare container
+### Minimal bare container
 
 Shell only, without shared folders, desktop access, or nested-container permissions:
 
 ```bash
 podman run -it --hostname debian-dev --name debian-dev \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
-  ghcr.io/parksnoopy/debian-slim-zsh:latest
+  ghcr.io/parksnoopy/debian-slim-zsh:latest \
+  /usr/local/bin/as-admin /usr/bin/zsh -l
 ```
 
 Runs as `admin` with passwordless `sudo`; use trusted code only.
@@ -101,7 +195,7 @@ podman start -ai debian-dev
 
 Packages and home files remain until container removal; examples omit `--rm`.
 
-### Empty-command startup error
+#### Empty-command startup error
 
 If crun reports `cannot find` with an empty command, inspect the local image and failed container (substitute its name):
 
@@ -126,7 +220,7 @@ podman run --rm -it --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
   /usr/local/bin/as-admin /usr/bin/zsh -l
 ```
 
-## Share a project folder
+### Share a project folder
 
 From your host project folder:
 
@@ -135,32 +229,14 @@ podman run -it --hostname debian-project --name debian-project \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
   --volume "$PWD:/home/admin/workspace" \
   --workdir /home/admin/workspace \
-  ghcr.io/parksnoopy/debian-slim-zsh:latest
+  ghcr.io/parksnoopy/debian-slim-zsh:latest \
+  /usr/local/bin/as-admin /usr/bin/zsh -l
 ```
 
 Guest changes affect the host folder.
 On SELinux, use `--volume "$PWD:/home/admin/workspace:Z"` for a dedicated project folder, not your whole home.
 
-### Users and file ownership
-
-For host-rootless Podman:
-
-| Option | Meaning |
-| --- | --- |
-| `--userns=keep-id:uid=1000,gid=1000` | Maps your host user and primary group to the container's `admin` account at `1000:1000` |
-| `--user=0:0` | Starts container initialization as container root, not host root |
-
-The shell runs as `admin`; ordinary bind mounts use these host owners:
-
-| Who creates a file in the workspace? | Owner shown on the host |
-| --- | --- |
-| `admin` | Your host user |
-| Container root, including commands run through `sudo` | A subordinate host UID, not host root |
-
-Use `admin` for project files to avoid subordinate-UID ownership.
-Extra ownership/ID-mapping options or host `sudo podman` change these rules.
-
-## Allow access to `/dev/fuse`
+### Allow access to `/dev/fuse`
 
 Requires crun and host-user access to `/dev/fuse`:
 
@@ -169,12 +245,13 @@ podman run -it --hostname debian-fuse --name debian-fuse \
   --runtime crun --group-add keep-groups \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
   --device /dev/fuse:/dev/fuse \
-  ghcr.io/parksnoopy/debian-slim-zsh:latest
+  ghcr.io/parksnoopy/debian-slim-zsh:latest \
+  /usr/local/bin/as-admin /usr/bin/zsh -l
 ```
 
 Install FUSE tools inside the container; host security policy can still restrict mounts.
 
-## Run nested Podman
+### Run nested Podman
 
 Run outer Podman without `sudo`; use `sudo podman` inside.
 Requires host crun, subordinate UID/GID ranges, and `/dev/fuse` access.
@@ -196,7 +273,8 @@ podman run -it --hostname debian-nested --name debian-nested \
   --security-opt unmask=ALL \
   --device /dev/fuse:/dev/fuse \
   --volume debian-nested-storage:/var/lib/containers \
-  ghcr.io/parksnoopy/debian-slim-zsh:latest
+  ghcr.io/parksnoopy/debian-slim-zsh:latest \
+  /usr/local/bin/as-admin /usr/bin/zsh -l
 ```
 
 Inside, install Podman:
@@ -232,13 +310,13 @@ The storage volume persists inner data without a host engine socket; keep its us
 Stop inner containers before exiting.
 Resume this workspace with `podman start -ai debian-nested`.
 
-## Back up and migrate with tar
+# Back up and migrate
 
 Restores archived home and Debian package state, keeping the replacement's s6-overlay and existing `/usr/local` files.
 Other paths receive missing files only; destination-only files remain.
 Full container migration is not runtime-verified.
 
-### Archive the workspace
+## Archive the workspace
 
 Inside the running source container as `admin`, from `/home/admin/workspace`.
 Stop application writers and all inner containers; do not change packages during backup.
@@ -290,7 +368,7 @@ Keep the archive private and inspect it only after successful creation:
 sudo tar --zstd -tf rootfs.tar.zstd
 ```
 
-### Restore into a replacement
+## Restore into a replacement
 
 Create a fresh container with the same architecture, Debian filesystem layout, and compatible user mapping.
 From the same host project folder:
@@ -300,7 +378,8 @@ podman run -it --hostname debian-restored --name debian-restored \
   --userns=keep-id:uid=1000,gid=1000 --user=0:0 \
   --volume "$PWD:/home/admin/workspace" \
   --workdir /home/admin/workspace \
-  ghcr.io/parksnoopy/debian-slim-zsh:latest
+  ghcr.io/parksnoopy/debian-slim-zsh:latest \
+  /usr/local/bin/as-admin /usr/bin/zsh -l
 ```
 
 For desktop/nested access, reuse the full launch options with a new name and fresh data volumes.
@@ -363,7 +442,7 @@ ACLs/xattrs need compatible filesystems, mappings, and policies; verify metadata
 SELinux labels follow destination policy; restored files may still be incompatible.
 Keep the source and archive until verification succeeds.
 
-## Install your preferred tools
+# Install your preferred tools
 
 Inside the workspace; nothing installs automatically.
 Default: Oh My Zsh.
@@ -404,22 +483,5 @@ Install everything except a selected topic:
 ```
 
 Use `--list` for topics, `-y` to skip confirmation; reopen the shell after configuration changes.
-
-## Open another terminal
-
-For a running workspace:
-
-```bash
-podman exec -it debian-workspace as-admin zsh -l
-```
-
-For tmux:
-
-```bash
-podman exec -it debian-workspace as-admin tmux -2u attach-session
-```
-
-Substitute your container name; tmux requires an existing session.
-Keep the original workspace process running; exiting its shell or last tmux session stops the container.
 
 For project structure and contributor checks, see [Architecture](docs/ARCHITECTURE.md).
