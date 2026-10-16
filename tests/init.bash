@@ -23,6 +23,7 @@ sudo() {
 	fi
 	if [ "$APT_FAIL" = true ]; then
 		case "$*" in
+			'apt install -y --no-install-recommends libwayland-client0 libx11-6') return 7 ;;
 			'apt install -y golang'|'apt install -y podman podman-compose crun conmon fuse-overlayfs') return 7 ;;
 			'apt install -y ca-certificates curl'|'apt update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/sparky-extras.sources '*) return 7 ;;
 		esac
@@ -105,29 +106,30 @@ run 0 --help
 run 0 install --help
 run 0 update --help
 run 0 --list
-[ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc\npodman\nsparky-extras' ]
+[ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc\npodman\nsparky-extras\ndisplay-clients' ]
 while IFS= read -r topic; do
 	[ -f "$ROOT/init.d/$topic.topic" ]
 	grep -q "'$topic:" "$ROOT/src/_init.sh"
 done <<< "$OUTPUT"
 shopt -s nullglob
 topic_files=("$ROOT"/init.d/*.topic)
-[ "${#topic_files[@]}" -eq 9 ]
+[ "${#topic_files[@]}" -eq 10 ]
 legacy_topic_files=("$ROOT"/init.d/*.sh)
 [ "${#legacy_topic_files[@]}" -eq 0 ]
 run 0 install git-config golang git-config python-uv --exclude python-uv --dry-run
 [[ "$OUTPUT" == *'Preview topic: git-config'*'Preview topic: golang'* ]]
 [[ "$OUTPUT" != *'Preview topic: python-uv'* ]]
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic: git-config')" -eq 1 ]
-run 0 install sparky-extras podman nanorc python-tldr python-uv oh-my-zsh oh-my-tmux golang git-config --dry-run
-[[ "$OUTPUT" == *'Preview topic: sparky-extras'*'Preview topic: podman'*'Preview topic: nanorc'*'Preview topic: python-tldr'*'Preview topic: python-uv'*'Preview topic: oh-my-zsh'*'Preview topic: oh-my-tmux'*'Preview topic: golang'*'Preview topic: git-config'* ]]
+run 0 install display-clients sparky-extras podman nanorc python-tldr python-uv oh-my-zsh oh-my-tmux golang git-config --dry-run
+[[ "$OUTPUT" == *'Preview topic: display-clients'*'Preview topic: sparky-extras'*'Preview topic: podman'*'Preview topic: nanorc'*'Preview topic: python-tldr'*'Preview topic: python-uv'*'Preview topic: oh-my-zsh'*'Preview topic: oh-my-tmux'*'Preview topic: golang'*'Preview topic: git-config'* ]]
+[[ "$OUTPUT" == *'sudo apt install -y --no-install-recommends libwayland-client0 libx11-6'* ]]
 [[ "$OUTPUT" == *'core priority 90, testing priority 89'*'Dir::Etc::sourceparts=""'* ]]
 [[ "$OUTPUT" == *'sudo apt install -y podman podman-compose crun conmon fuse-overlayfs'*'/usr/local/bin/podman'*'/usr/local/bin/podman-compose'* ]]
 run 0 --dry-run
 [[ "$OUTPUT" == *'Preview topic: oh-my-zsh'* ]]
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 1 ]
 run 0 install '*' --dry-run
-[ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 9 ]
+[ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 10 ]
 run 0 install '*' --exclude '*' --dry-run
 [ "$OUTPUT" = '' ]
 run 1 install unknown --dry-run
@@ -149,6 +151,14 @@ grep -qx 'curl https://api.github.com/repos/fixture/other/commits/release' "$COM
 INIT_GITHUB_REPOSITORY=fixture/other INIT_GITHUB_BRANCH=release INIT_TARGET_SCRIPT="$CHECK_DIR/custom-init.sh" UPDATE_HASH=3333333333333333333333333333333333333333 run 0 update
 grep -qx 'curl https://raw.githubusercontent.com/fixture/other/release/init.sh' "$COMMAND_LOG"
 : > "$COMMAND_LOG"
+
+run 0 install display-clients display-clients -y
+[[ "$OUTPUT" == *'Topic complete: display-clients'* ]]
+[ "$(grep -cx 'sudo apt update' "$COMMAND_LOG")" -eq 1 ]
+[ "$(grep -cx 'sudo apt install -y --no-install-recommends libwayland-client0 libx11-6' "$COMMAND_LOG")" -eq 1 ]
+APT_FAIL=true run 1 install display-clients -y
+[[ "$OUTPUT" == *'Failed topics: display-clients'* ]]
+! grep -Eq 'libwayland-client0|libx11-6' "$ROOT/Containerfile"
 
 run 0 install golang -y
 [[ "$OUTPUT" == *'Topic complete: golang'* ]]
@@ -209,6 +219,9 @@ export INIT_GITHUB_REPOSITORY=fixture/debian-slim-zsh
 run 0 install golang -y
 [[ "$OUTPUT" == *'Topic complete: golang'* ]]
 grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/golang.topic' "$COMMAND_LOG"
+run 0 install display-clients -y
+[[ "$OUTPUT" == *'Topic complete: display-clients'* ]]
+grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/display-clients.topic' "$COMMAND_LOG"
 run 0 install podman -y
 cmp "$CHECK_DIR/podman" "$CHECK_DIR/podman-first"
 cmp "$CHECK_DIR/podman-compose" "$CHECK_DIR/podman-compose-first"

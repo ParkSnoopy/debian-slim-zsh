@@ -15,6 +15,7 @@ _init_sh() {
 		'nanorc:Install syntax highlighting for Nano'
 		'podman:Install Podman, podman-compose, and sudo defaults for nested containers'
 		'sparky-extras:Enable Sparky core and testing repositories'
+		'display-clients:Install Wayland and X11 client libraries'
 		'\*:All available topics'
 	)
 

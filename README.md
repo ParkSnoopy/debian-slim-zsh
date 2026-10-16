@@ -389,6 +389,7 @@ Choose tools in any order:
 | `nanorc` | Nano and syntax highlighting |
 | `podman` | Podman, podman-compose, crun, conmon, fuse-overlayfs, and sudo wrappers for nested containers |
 | `sparky-extras` | Sparky APT repositories: core priority 90, testing 89 |
+| `display-clients` | Wayland and X11 client libraries, without recommended packages |
 
 Preview without installing:
 

@@ -38,6 +38,7 @@ AVAILABLE_TOPICS=(
 	nanorc
 	podman
 	sparky-extras
+	display-clients
 )
 
 DEFAULT_TOPICS=(oh-my-zsh)
@@ -268,6 +269,9 @@ preview_topic() {
 			echo 'run/create defaults: --cgroups=disabled --network=host --log-driver=k8s-file --security-opt label=disable --security-opt apparmor=unconfined'
 			echo 'run also defaults to --rm; non-root podman passes through unchanged'
 			echo 'sudo podman-compose: use the Podman wrapper without pods or automatic container removal; non-root calls pass through unchanged'
+			;;
+		display-clients)
+			echo 'sudo apt install -y --no-install-recommends libwayland-client0 libx11-6'
 			;;
 		sparky-extras)
 			echo 'sudo apt install -y ca-certificates curl'

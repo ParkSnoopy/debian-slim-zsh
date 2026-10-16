@@ -85,10 +85,14 @@ These records do not track later user package installations.
 5. Each selected topic runs in a separate Bash process. Failed topics do not prevent later topics from running.
 6. The coordinator reports all failed topics and returns a nonzero status when any topic fails.
 
-Supported topics are `git-config`, `golang`, `oh-my-tmux`, `oh-my-zsh`, `python-uv`, `python-tldr`, `nanorc`, `podman`, and `sparky-extras`.
+Supported topics are `git-config`, `golang`, `oh-my-tmux`, `oh-my-zsh`, `python-uv`, `python-tldr`, `nanorc`, `podman`, `sparky-extras`, and `display-clients`.
 The default selection is `oh-my-zsh`.
 No topic requires another topic to run first. Each topic declares its own package dependencies.
 Keep the coordinator catalogue, previews, completion catalogue, topic files, and tests consistent.
+
+The [display-clients topic](../init.d/display-clients.topic) installs `libwayland-client0` and `libx11-6` without recommended packages.
+These libraries remain outside the base image and default topic selection.
+The topic does not install a display server or set a display backend.
 
 The [sparky-extras topic](../init.d/sparky-extras.topic) enables Sparky's `core` and `tiamat` repositories for Debian testing without installing a desktop or running a distribution upgrade.
 It checks the downloaded key's SHA-256, scopes trust through `Signed-By`, and pins Sparky release origins at priority `90` for `core` and `89` for `testing`, keeping normal Debian candidates preferred.
@@ -264,7 +268,7 @@ actionlint .github/workflows/deploy-image.yaml
 ```
 
 The installer suite uses controlled package and download fixtures in a temporary home.
-It checks the exact eight-topic inventory, `.topic` paths, arbitrary order, exclusions, failures, updates, and download cleanup.
+It checks the exact topic inventory, `.topic` paths, arbitrary order, exclusions, failures, updates, and download cleanup.
 Podman checks redirect installation into the fixture directory and capture the generated wrapper's exec arguments with controlled identity and exit status.
 They cover repeated installation, package failure, root defaults, non-root passthrough, command aliases, quoting, output streams, and error propagation.
 It does not install real packages or contact upstream services.
