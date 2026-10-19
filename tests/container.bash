@@ -18,6 +18,10 @@ trap '"$ENGINE" rm -f "$NAME" "$NAME-signal" "$NAME-tmux" >/dev/null 2>&1; rm -r
 	/usr/local/bin/as-admin /usr/bin/zsh -lec '
 		. /etc/os-release
 		[[ "$ID" == debian ]]
+		[[ "$VERSION_ID" == 13 && "$VERSION_CODENAME" == trixie ]]
+		grep -qx "Suites: trixie trixie-updates" /etc/apt/sources.list.d/debian.sources
+		grep -qx "Suites: trixie-security" /etc/apt/sources.list.d/debian.sources
+		[[ ! -e /etc/apt/sources.list.d/backports.sources ]]
 		[[ "$TZ" == Asia/Seoul ]]
 		[[ "$(id -u):$(id -g)" == 1000:1000 ]]
 		[[ " $(id -G) " == *" 1234 "* ]]
@@ -83,6 +87,11 @@ grep -q TMUX_OUTPUT_OK "$CHECK_DIR/tmux"
 			sudo -n apt-get update
 			sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends hello
 			~/init.sh install podman -y
+			! grep -q "http://" /etc/apt/sources.list.d/debian.sources
+			~/init.sh install backports sparky-extras -y
+			grep -qx "Suites: trixie-backports" /etc/apt/sources.list.d/backports.sources
+			grep -qx "Suites: core" /etc/apt/sources.list.d/sparky-extras.sources
+			! grep -Eq "tiamat|testing" /etc/apt/sources.list.d/sparky-extras.sources /etc/apt/preferences.d/sparky-extras
 			echo preserved > "$HOME/lifecycle-test"
 			echo preserved | sudo -n tee /etc/workspace-lifecycle-test
 			echo INSTALL_OK

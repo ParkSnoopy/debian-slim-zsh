@@ -40,6 +40,7 @@ AVAILABLE_TOPICS=(
 	sparky-extras
 	display-clients
 	rust
+	backports
 )
 
 DEFAULT_TOPICS=(oh-my-zsh)
@@ -291,6 +292,11 @@ preview_topic() {
 		display-clients)
 			echo 'sudo apt install -y --no-install-recommends libwayland-client0 libx11-6'
 			;;
+		backports)
+			echo 'sudo install -o root -g root -m 644 <tmp-sources> /etc/apt/sources.list.d/backports.sources'
+			echo 'Debian trixie-backports: HTTPS, archive keyring, opt-in priority 100; no package upgrades'
+			echo 'sudo apt update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/backports.sources -o Dir::Etc::sourceparts="" -o APT::Get::List-Cleanup=0 -o APT::Update::Error-Mode=any'
+			;;
 		sparky-extras)
 			echo 'sudo apt install -y ca-certificates curl'
 			echo 'curl -fsSL https://repo.sparkylinux.org/sparky-repo.asc -o <tmp-key>'
@@ -298,7 +304,7 @@ preview_topic() {
 			echo 'sudo install -o root -g root -m 644 <tmp-key> /usr/share/keyrings/sparky-extras.asc'
 			echo 'sudo install -o root -g root -m 644 <tmp-sources> /etc/apt/sources.list.d/sparky-extras.sources'
 			echo 'sudo install -o root -g root -m 644 <tmp-preferences> /etc/apt/preferences.d/sparky-extras'
-			echo 'Sparky repositories: Signed-By key, core priority 90, testing priority 89; no distribution upgrade'
+			echo 'Sparky repository: Signed-By key, core priority 90; no distribution upgrade'
 			echo 'sudo apt update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/sparky-extras.sources -o Dir::Etc::sourceparts="" -o APT::Get::List-Cleanup=0 -o APT::Update::Error-Mode=any'
 			;;
 	esac
@@ -446,8 +452,18 @@ run_topic() {
 	return "$status"
 }
 
+APT_SOURCE_FILES=()
+for source_file in /etc/apt/sources.list.d/*.source /etc/apt/sources.list.d/*.sources; do
+	[ -f "$source_file" ] || continue
+	APT_SOURCE_FILES+=("$source_file")
+done
+
 if [ "$DRY_RUN" = true ]; then
 	if [ "${#SELECTED_TOPICS[@]}" -gt 0 ]; then
+		say_info "Preview APT source HTTPS rewrite"
+		for source_file in "${APT_SOURCE_FILES[@]}"; do
+			echo "sudo sed -i 's|http://|https://|g' \"$source_file\""
+		done
 		say_info "Preview package index update"
 		echo 'sudo apt update'
 	fi
@@ -465,6 +481,9 @@ fi
 FAILED_TOPICS=()
 
 if [ "${#SELECTED_TOPICS[@]}" -gt 0 ]; then
+	for source_file in "${APT_SOURCE_FILES[@]}"; do
+		sudo sed -i 's|http://|https://|g' "$source_file"
+	done
 	say_info "Updating package index"
 	sudo apt update
 fi

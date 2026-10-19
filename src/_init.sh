@@ -14,9 +14,10 @@ _init_sh() {
 		'python-tldr:Install tldr client'
 		'nanorc:Install syntax highlighting for Nano'
 		'podman:Install Podman, podman-compose, and sudo defaults for nested containers'
-		'sparky-extras:Enable Sparky core and testing repositories'
+		'sparky-extras:Enable the Sparky core repository'
 		'display-clients:Install Wayland and X11 client libraries'
 		'rust:Install stable Rust with the complete profile without PATH changes'
+		'backports:Enable opt-in Debian 13 backports'
 		'\*:All available topics'
 	)
 

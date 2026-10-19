@@ -1,6 +1,6 @@
 # Debian, with zsh
 
-A small Debian testing workspace with zsh, tmux, and sudo.  
+A small Debian 13 stable workspace with zsh, tmux, and sudo.  
 Based on [ubuntu-slim-zsh](https://github.com/ParkSnoopy/ubuntu-slim-zsh).  
 
 ## Requirements
@@ -369,9 +369,10 @@ Choose tools in any order:
 | `python-tldr` | Python and the tldr client |
 | `nanorc` | Nano and syntax highlighting |
 | `podman` | Podman, podman-compose, crun, conmon, fuse-overlayfs, and sudo wrappers for nested containers |
-| `sparky-extras` | Sparky APT repositories: core priority 90, testing 89 |
+| `sparky-extras` | Sparky core APT repository at priority 90 |
 | `display-clients` | Wayland and X11 client libraries, without recommended packages |
 | `rust` | Stable Rust, complete profile, and `x86_64-unknown-linux-gnu`, without PATH changes |
+| `backports` | Debian 13 backports, with individual packages selected explicitly |
 
 Preview without installing:  
 

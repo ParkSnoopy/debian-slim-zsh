@@ -13,7 +13,7 @@ echo "f89766f7f5d0ff55d72b1319ac767be9ee1d1cb0be986abdd66413bff47a296a  $WORK_DI
 cat > "$WORK_DIR/sparky-extras.sources" <<'EOF'
 Types: deb
 URIs: https://repo.sparkylinux.org/
-Suites: core tiamat
+Suites: core
 Components: main
 Signed-By: /usr/share/keyrings/sparky-extras.asc
 EOF
@@ -22,10 +22,6 @@ cat > "$WORK_DIR/sparky-extras.preferences" <<'EOF'
 Package: *
 Pin: release o=SparkyLinux,a=core
 Pin-Priority: 90
-
-Package: *
-Pin: release o=SparkyLinux,a=testing
-Pin-Priority: 89
 EOF
 
 sudo install -o root -g root -m 644 "$WORK_DIR/sparky-extras.asc" /usr/share/keyrings/sparky-extras.asc
