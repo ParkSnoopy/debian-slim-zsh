@@ -17,7 +17,7 @@ _init_sh() {
 		'sparky-extras:Enable the Sparky core repository'
 		'display-clients:Install Wayland and X11 client libraries'
 		'rust:Install stable Rust with the complete profile without PATH changes'
-		'backports:Enable opt-in Debian 13 backports'
+		'bun:Install Bun with the official installer'
 		'\*:All available topics'
 	)
 

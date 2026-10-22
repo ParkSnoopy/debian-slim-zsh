@@ -35,7 +35,7 @@ The original Ubuntu image used dumb-init, not systemd.
 ## Image and process layout
 
 The image uses `debian:13-slim` and the s6-overlay version declared in the Containerfile.
-The base provides Debian 13's `trixie`, `trixie-security`, and `trixie-updates` sources without backports by default.
+The base provides Debian 13's `trixie`, `trixie-security`, and `trixie-updates` sources.
 The build installs timezone data but does not set `TZ` or select a custom system timezone.
 `src/.zshenv` supplies the shell's timezone default and preserves a nonempty runtime `TZ` override.
 The build verifies fixed SHA-256 checksums for the noarch archive and the selected amd64 or arm64 archive.
@@ -85,7 +85,7 @@ These records do not track later user package installations.
 5. Each selected topic runs in a separate Bash process. Failed topics do not prevent later topics from running.
 6. The coordinator reports all failed topics and returns a nonzero status when any topic fails.
 
-Supported topics are `git-config`, `golang`, `oh-my-tmux`, `oh-my-zsh`, `python-uv`, `python-tldr`, `nanorc`, `podman`, `sparky-extras`, `display-clients`, `rust`, and `backports`.
+Supported topics are `git-config`, `golang`, `oh-my-tmux`, `oh-my-zsh`, `python-uv`, `python-tldr`, `nanorc`, `podman`, `sparky-extras`, `display-clients`, `rust`, and `bun`.
 The default selection is `oh-my-zsh`.
 No topic requires another topic to run first. Each topic declares its own package dependencies.
 Keep the coordinator catalogue, previews, completion catalogue, topic files, and tests consistent.
@@ -99,11 +99,11 @@ It selects the `stable` toolchain, `complete` profile, and `x86_64-unknown-linux
 It does not edit PATH or shell configuration, or source Cargo's environment file.
 Unavailable components in the complete profile fail the topic without falling back to another profile.
 
-The [backports topic](../init.d/backports.topic) adds `trixie-backports` over HTTPS using Debian's archive keyring.
-The repository's release metadata supplies opt-in priority `100`; the topic does not select or upgrade packages.
+The [bun topic](../init.d/bun.topic) installs `ca-certificates`, `curl`, and `unzip`, then stages Bun's official installer before running it as the current user.
+The installer uses Bun's default per-user location and shell integration, respecting an existing `BUN_INSTALL` override.
 The [sparky-extras topic](../init.d/sparky-extras.topic) enables only Sparky's `core` repository without installing a desktop or running a distribution upgrade.
 It checks the downloaded key's SHA-256, scopes trust through `Signed-By`, and pins the Sparky core release origin at priority `90`, keeping normal Debian candidates preferred.
-Repository topics refresh only their added source with list cleanup disabled; this is the repository-addition exception to the coordinator's single global refresh.
+The Sparky topic refreshes only its added source with list cleanup disabled; this is the repository-addition exception to the coordinator's single global refresh.
 
 Files in `init.d/` use `.topic`, but their interpreter remains Bash.
 CLI topic names do not include the extension.

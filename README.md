@@ -372,7 +372,7 @@ Choose tools in any order:
 | `sparky-extras` | Sparky core APT repository at priority 90 |
 | `display-clients` | Wayland and X11 client libraries, without recommended packages |
 | `rust` | Stable Rust, complete profile, and `x86_64-unknown-linux-gnu`, without PATH changes |
-| `backports` | Debian 13 backports, with individual packages selected explicitly |
+| `bun` | Bun through its official per-user installer |
 
 Preview without installing:  
 

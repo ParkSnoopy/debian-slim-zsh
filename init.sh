@@ -40,7 +40,7 @@ AVAILABLE_TOPICS=(
 	sparky-extras
 	display-clients
 	rust
-	backports
+	bun
 )
 
 DEFAULT_TOPICS=(oh-my-zsh)
@@ -292,10 +292,10 @@ preview_topic() {
 		display-clients)
 			echo 'sudo apt install -y --no-install-recommends libwayland-client0 libx11-6'
 			;;
-		backports)
-			echo 'sudo install -o root -g root -m 644 <tmp-sources> /etc/apt/sources.list.d/backports.sources'
-			echo 'Debian trixie-backports: HTTPS, archive keyring, opt-in priority 100; no package upgrades'
-			echo 'sudo apt update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/backports.sources -o Dir::Etc::sourceparts="" -o APT::Get::List-Cleanup=0 -o APT::Update::Error-Mode=any'
+		bun)
+			echo 'sudo apt install -y ca-certificates curl unzip'
+			echo "curl --proto '=https' --tlsv1.2 -fsSL https://bun.com/install -o <tmp-installer>"
+			echo 'bash <tmp-installer>'
 			;;
 		sparky-extras)
 			echo 'sudo apt install -y ca-certificates curl'

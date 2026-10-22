@@ -10,7 +10,7 @@ export COMMAND_LOG="$CHECK_DIR/commands"
 export CURL_FAIL=false APT_FAIL=false UPDATE_INVALID=false UPDATE_HASH=b1ec88e
 export SPARKY_KEY_INVALID=false
 export SPARKY_REFRESH_FAIL=false
-export BACKPORTS_REFRESH_FAIL=false HTTPS_FAIL=false
+export HTTPS_FAIL=false BUN_STATUS=0
 export RUSTUP_STATUS=0
 export INIT_BASE_URL= INIT_GITHUB_REPOSITORY=
 unset INIT_GITHUB_BRANCH INIT_TARGET_SCRIPT
@@ -31,9 +31,6 @@ sudo() {
 		command sed "$2" "$3" "$CHECK_DIR$4"
 		return
 	fi
-	if [ "$BACKPORTS_REFRESH_FAIL" = true ] && [[ "$*" == 'apt update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/backports.sources '* ]]; then
-		return 7
-	fi
 	if [ "$SPARKY_REFRESH_FAIL" = true ] && [[ "$*" == 'apt update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/sparky-extras.sources '* ]]; then
 		return 7
 	fi
@@ -42,6 +39,7 @@ sudo() {
 			'apt install -y --no-install-recommends libwayland-client0 libx11-6') return 7 ;;
 			'apt install -y golang'|'apt install -y podman podman-compose crun conmon fuse-overlayfs') return 7 ;;
 			'apt install -y ca-certificates curl'|'apt update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/sparky-extras.sources '*) return 7 ;;
+			'apt install -y ca-certificates curl unzip') return 7 ;;
 		esac
 	fi
 	if [ "$1" = install ]; then
@@ -50,7 +48,7 @@ sudo() {
 			/usr/local/bin/podman|/usr/local/bin/podman-compose)
 				command install -m 755 "${args[-2]}" "$CHECK_DIR/${args[-1]##*/}"
 				;;
-			/usr/share/keyrings/sparky-extras.asc|/etc/apt/sources.list.d/sparky-extras.sources|/etc/apt/preferences.d/sparky-extras|/etc/apt/sources.list.d/backports.sources)
+			/usr/share/keyrings/sparky-extras.asc|/etc/apt/sources.list.d/sparky-extras.sources|/etc/apt/preferences.d/sparky-extras)
 				mkdir -p "$CHECK_DIR$(dirname "${args[-1]}")"
 				command install -m 644 "${args[-2]}" "$CHECK_DIR${args[-1]}"
 				;;
@@ -79,6 +77,10 @@ curl() {
 	echo "curl $url" >> "$COMMAND_LOG"
 	[ "$CURL_FAIL" = false ] || return 23
 	case "$url" in
+		https://bun.com/install)
+			printf '%s\n' 'echo "bun-install $*" >> "$COMMAND_LOG"' \
+				'exit "$BUN_STATUS"' > "$output"
+			;;
 		https://sh.rustup.rs)
 			printf '%s\n' 'printf "%s\0" "$@" > "$CHECK_DIR/rustup-argv"' \
 				'printf "%s\n" "$PATH" > "$CHECK_DIR/rustup-path"' \
@@ -128,7 +130,7 @@ run 0 --help
 run 0 install --help
 run 0 update --help
 run 0 --list
-[ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc\npodman\nsparky-extras\ndisplay-clients\nrust\nbackports' ]
+[ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc\npodman\nsparky-extras\ndisplay-clients\nrust\nbun' ]
 while IFS= read -r topic; do
 	[ -f "$ROOT/init.d/$topic.topic" ]
 	grep -q "'$topic:" "$ROOT/src/_init.sh"
@@ -142,9 +144,9 @@ run 0 install git-config golang git-config python-uv --exclude python-uv --dry-r
 [[ "$OUTPUT" == *'Preview topic: git-config'*'Preview topic: golang'* ]]
 [[ "$OUTPUT" != *'Preview topic: python-uv'* ]]
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic: git-config')" -eq 1 ]
-run 0 install backports rust display-clients sparky-extras podman nanorc python-tldr python-uv oh-my-zsh oh-my-tmux golang git-config --dry-run
-[[ "$OUTPUT" == *'Preview topic: backports'*'Preview topic: rust'*'Preview topic: display-clients'*'Preview topic: sparky-extras'*'Preview topic: podman'*'Preview topic: nanorc'*'Preview topic: python-tldr'*'Preview topic: python-uv'*'Preview topic: oh-my-zsh'*'Preview topic: oh-my-tmux'*'Preview topic: golang'*'Preview topic: git-config'* ]]
-[[ "$OUTPUT" == *'Preview APT source HTTPS rewrite'*'sudo apt update'*'opt-in priority 100'* ]]
+run 0 install bun rust display-clients sparky-extras podman nanorc python-tldr python-uv oh-my-zsh oh-my-tmux golang git-config --dry-run
+[[ "$OUTPUT" == *'Preview topic: bun'*'Preview topic: rust'*'Preview topic: display-clients'*'Preview topic: sparky-extras'*'Preview topic: podman'*'Preview topic: nanorc'*'Preview topic: python-tldr'*'Preview topic: python-uv'*'Preview topic: oh-my-zsh'*'Preview topic: oh-my-tmux'*'Preview topic: golang'*'Preview topic: git-config'* ]]
+[[ "$OUTPUT" == *'Preview APT source HTTPS rewrite'*'sudo apt update'*'https://bun.com/install'*'bash <tmp-installer>'* ]]
 [[ "$OUTPUT" == *'--default-toolchain stable --profile complete --target x86_64-unknown-linux-gnu --no-modify-path'* ]]
 [[ "$OUTPUT" == *'sudo apt install -y --no-install-recommends libwayland-client0 libx11-6'* ]]
 [[ "$OUTPUT" == *'core priority 90;'*'Dir::Etc::sourceparts=""'* ]]
@@ -260,20 +262,21 @@ SPARKY_REFRESH_FAIL=true run 1 install sparky-extras golang -y
 [[ "$OUTPUT" == *'Topic failed: sparky-extras'*'Topic complete: golang'*'Failed topics: sparky-extras'* ]]
 
 : > "$COMMAND_LOG"
-run 0 install backports backports golang -y
-[[ "$OUTPUT" == *'Topic complete: backports'*'Topic complete: golang'* ]]
+run 0 install bun bun golang -y
+[[ "$OUTPUT" == *'Topic complete: bun'*'Topic complete: golang'* ]]
 [ "$(grep -cx 'sudo apt update' "$COMMAND_LOG")" -eq 1 ]
-[ "$(grep -c '^sudo apt update -o Dir::Etc::sourcelist=' "$COMMAND_LOG")" -eq 1 ]
-! grep -q ' upgrade' "$COMMAND_LOG"
-cmp "$CHECK_DIR/etc/apt/sources.list.d/backports.sources" <(printf '%s\n' \
-	'Types: deb' 'URIs: https://deb.debian.org/debian' 'Suites: trixie-backports' \
-	'Components: main' 'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg')
-run 0 install backports -y
-BACKPORTS_REFRESH_FAIL=true run 1 install backports golang -y
-[[ "$OUTPUT" == *'Topic failed: backports'*'Topic complete: golang'*'Failed topics: backports'* ]]
+[ "$(grep -c '^bun-install ' "$COMMAND_LOG")" -eq 1 ]
+: > "$COMMAND_LOG"
+APT_FAIL=true run 1 install bun -y
+! grep -q '^curl ' "$COMMAND_LOG"
+CURL_FAIL=true run 1 install bun -y
+! grep -q '^bun-install ' "$COMMAND_LOG"
+BUN_STATUS=37 run 1 install bun golang -y
+[[ "$OUTPUT" == *'Topic failed: bun'*'Topic complete: golang'*'Failed topics: bun'* ]]
+run 0 install bun -y
 : > "$COMMAND_LOG"
 if compgen -G '/etc/apt/sources.list.d/*.sources' >/dev/null; then
-	HTTPS_FAIL=true run 7 install backports -y
+	HTTPS_FAIL=true run 7 install bun -y
 	! grep -q '^sudo apt ' "$COMMAND_LOG"
 fi
 
@@ -294,8 +297,8 @@ cmp "$CHECK_DIR/podman-compose" "$CHECK_DIR/podman-compose-first"
 grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/podman.topic' "$COMMAND_LOG"
 run 0 install sparky-extras -y
 grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/sparky-extras.topic' "$COMMAND_LOG"
-run 0 install backports -y
-grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/backports.topic' "$COMMAND_LOG"
+run 0 install bun -y
+grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/bun.topic' "$COMMAND_LOG"
 CURL_FAIL=true run 1 install golang -y
 [[ "$OUTPUT" == *'Topic failed: golang'* ]]
 
@@ -333,7 +336,7 @@ cmp "$CHECK_DIR/self-init.sh" <(sed 's/^CURRENT_COMMIT_HASH="[0-9a-f]*"/CURRENT_
 cmp "$ROOT/src/.zshenv" "$HOME/.zshenv"
 
 CURL_FAIL=true
-for topic in nanorc oh-my-zsh sparky-extras rust; do
+for topic in nanorc oh-my-zsh sparky-extras rust bun; do
 	status=0
 	bash "$ROOT/init.d/$topic.topic" >/dev/null 2>&1 || status=$?
 	[ "$status" -eq 23 ]
