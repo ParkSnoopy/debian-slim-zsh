@@ -222,9 +222,9 @@ Optional cache cleanup for installed tools only, with custom sccache paths adjus
 ```bash
 ccache --clear
 sccache --stop-server
-rm -rf -- "${XDG_CACHE_HOME:-$HOME/.cache}/sccache"
 pip cache purge
 sudo apt-get clean
+rm -rf -- "${XDG_CACHE_HOME:-$HOME/.cache}"
 ```
 
 Write `rootfs.tar.zstd` in `$PWD`, replacing an existing archive:  
