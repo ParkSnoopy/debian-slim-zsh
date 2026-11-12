@@ -18,13 +18,14 @@ _init_sh() {
 		'display-clients:Install Wayland and X11 client libraries'
 		'rust:Install stable Rust with the complete profile without PATH changes'
 		'bun:Install Bun with the official installer'
+		'nodejs:Install Node.js 26, npm, and pnpm through nvm'
 		'\*:All available topics'
 	)
 
 	local -a subcommands
 	subcommands=(
 		'install:Install only selected topics'
-		'update:Compare commit hash and replace ~/init.sh if newer'
+		'update:Update ~/init.sh and its topic bundle'
 	)
 
 	local -a common_opts

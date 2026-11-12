@@ -41,6 +41,7 @@ AVAILABLE_TOPICS=(
 	display-clients
 	rust
 	bun
+	nodejs
 )
 
 DEFAULT_TOPICS=(oh-my-zsh)
@@ -60,7 +61,7 @@ ${BOLD}Usage${RESET}
 
 ${BOLD}Commands${RESET}
   install topic ...              install only selected topics; use '*' for all
-  update                         compare commit hash and replace ~/init.sh if newer
+  update                         update ~/init.sh and its topic bundle
 
 ${BOLD}Selection${RESET}
   --exclude topic ...            remove topics after selection
@@ -115,7 +116,7 @@ ${BOLD}${CYAN}init.sh update${RESET}
 ${BOLD}Usage${RESET}
   init.sh update
 
-Update ~/init.sh when a newer commit exists. Confirm before updating ~/.zshenv.
+Update ~/init.sh and its topic bundle. Confirm before updating ~/.zshenv.
 EOF
 }
 
@@ -137,30 +138,40 @@ say_error() {
 }
 
 self_update() (
-	local BASE_URL="${BASE_URL:-https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_BRANCH}"
+	local BASE_URL="$BASE_URL"
 	local latest_json
 	local latest_hash
 	local latest_short_hash
 	local next_script
 	local next_zshenv
+	local next_topics
+	local topic_list
+	local topic
 	local reply
 	local target_script
+	local target_topics
 	local update_ready=false
+	local bundle_missing=false
 	local status
 
 	target_script="${INIT_TARGET_SCRIPT:-$HOME/init.sh}"
+	target_topics="$(dirname "$target_script")/init.d"
 	next_script=
 	next_zshenv=
+	next_topics=
 	trap '
 		status=$?
 		if [ "$status" -eq 0 ] && [ "$update_ready" = true ]; then
-			if install -m 755 "$next_script" "$target_script"; then
+			if mkdir -p "$target_topics" &&
+				install -m 644 "$next_topics"/*.topic "$target_topics/" &&
+				install -m 755 "$next_script" "$target_script"; then
 				say_success "Already up to date (${latest_short_hash}): $target_script"
 			else
 				status=$?
 			fi
 		fi
 		rm -f "$next_script" "$next_zshenv"
+		[ "$next_topics" = "" ] || rm -rf "$next_topics"
 		exit "$status"
 	' EXIT
 
@@ -174,17 +185,33 @@ self_update() (
 		exit 1
 	fi
 
-	if [ "$latest_short_hash" = "$CURRENT_COMMIT_HASH" ]; then
+	[ -d "$(dirname "$target_script")" ] || exit 1
+	for topic in "${AVAILABLE_TOPICS[@]}"; do
+		[ -f "$target_topics/$topic.topic" ] || bundle_missing=true
+	done
+	if [ "$BASE_URL" = "" ]; then
+		BASE_URL="https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$latest_hash"
+	fi
+
+	if [ "$latest_short_hash" = "$CURRENT_COMMIT_HASH" ] && [ "$bundle_missing" = false ]; then
 		say_success "Already up to date (${CURRENT_COMMIT_HASH})."
 	fi
 
-	if [ "$latest_short_hash" != "$CURRENT_COMMIT_HASH" ]; then
+	if [ "$latest_short_hash" != "$CURRENT_COMMIT_HASH" ] || [ "$bundle_missing" = true ]; then
 		say_info "Updating ${CURRENT_COMMIT_HASH} → ${latest_short_hash}"
 		next_script="$(mktemp "${TMPDIR:-/tmp}/init-update.XXXXXX")"
 		curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/init.sh" -o "$next_script"
 		chmod +x "$next_script"
 		bash -n "$next_script"
 		sed -i "s/^CURRENT_COMMIT_HASH=\"[0-9a-f]*\"/CURRENT_COMMIT_HASH=\"$latest_short_hash\"/" "$next_script"
+		next_topics="$(mktemp -d "${TMPDIR:-/tmp}/init-topics.XXXXXX")"
+		topic_list="$(bash "$next_script" --list)"
+		[ "$topic_list" != "" ] || exit 1
+		while IFS= read -r topic; do
+			[[ "$topic" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || exit 1
+			curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/init.d/$topic.topic" -o "$next_topics/$topic.topic"
+			bash -n "$next_topics/$topic.topic"
+		done <<< "$topic_list"
 		update_ready=true
 		if [ -d /usr/local/share/zsh/site-functions ] && [ -w /usr/local/share/zsh/site-functions ]; then
 			curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/src/_init.sh" -o /usr/local/share/zsh/site-functions/_init.sh 2>/dev/null || true
@@ -296,6 +323,19 @@ preview_topic() {
 			echo 'sudo apt install -y ca-certificates curl unzip'
 			echo "curl --proto '=https' --tlsv1.2 -fsSL https://bun.com/install -o <tmp-installer>"
 			echo 'bash <tmp-installer>'
+			;;
+		nodejs)
+			echo 'sudo apt install -y ca-certificates curl xz-utils'
+			echo 'export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"'
+			echo 'mkdir -p "$NVM_DIR"'
+			echo 'touch "$HOME/.zshrc"'
+			echo "curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh -o <tmp-installer>"
+			echo 'PROFILE="$HOME/.zshrc" METHOD=script bash <tmp-installer>'
+			echo '. "$NVM_DIR/nvm.sh" --no-use'
+			echo 'nvm install 26'
+			echo 'nvm alias default 26'
+			echo 'npm install -g corepack'
+			echo 'corepack enable pnpm'
 			;;
 		sparky-extras)
 			echo 'sudo apt install -y ca-certificates curl'

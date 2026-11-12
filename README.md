@@ -373,6 +373,7 @@ Choose tools in any order:
 | `display-clients` | Wayland and X11 client libraries, without recommended packages |
 | `rust` | Stable Rust, complete profile, and `x86_64-unknown-linux-gnu`, without PATH changes |
 | `bun` | Bun through its official per-user installer |
+| `nodejs` | Node.js 26, npm, and pnpm through per-user nvm |
 
 Preview without installing:  
 
@@ -388,5 +389,13 @@ Install everything except a selected topic:
 
 Use `--list` for topics and `-y` to skip confirmation.  
 Reopen the shell after configuration changes.  
+
+Update the installer and its topic bundle:  
+
+```bash
+~/init.sh update
+```
+
+If an older updater replaced only `~/init.sh`, run `~/init.sh update` again to install the matching topics.  
 
 See [Architecture](docs/ARCHITECTURE.md) for project structure and contributor checks.  

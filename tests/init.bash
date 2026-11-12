@@ -12,8 +12,10 @@ export SPARKY_KEY_INVALID=false
 export SPARKY_REFRESH_FAIL=false
 export HTTPS_FAIL=false BUN_STATUS=0
 export RUSTUP_STATUS=0
+export NVM_INSTALL_STATUS=0 NVM_STATUS=0 NPM_STATUS=0 COREPACK_STATUS=0
+export TOPIC_DOWNLOAD_FAIL=false TOPIC_INVALID=false
 export INIT_BASE_URL= INIT_GITHUB_REPOSITORY=
-unset INIT_GITHUB_BRANCH INIT_TARGET_SCRIPT
+unset INIT_GITHUB_BRANCH INIT_TARGET_SCRIPT NVM_DIR
 mkdir -p "$HOME" "$TMPDIR"
 touch "$COMMAND_LOG"
 for source_file in /etc/apt/sources.list.d/*.source /etc/apt/sources.list.d/*.sources; do
@@ -40,6 +42,7 @@ sudo() {
 			'apt install -y golang'|'apt install -y podman podman-compose crun conmon fuse-overlayfs') return 7 ;;
 			'apt install -y ca-certificates curl'|'apt update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/sparky-extras.sources '*) return 7 ;;
 			'apt install -y ca-certificates curl unzip') return 7 ;;
+			'apt install -y ca-certificates curl xz-utils') return 7 ;;
 		esac
 	fi
 	if [ "$1" = install ]; then
@@ -65,6 +68,16 @@ python3() {
 	echo "python3 $*" >> "$COMMAND_LOG"
 }
 
+npm() {
+	echo "npm $*" >> "$COMMAND_LOG"
+	return "$NPM_STATUS"
+}
+
+corepack() {
+	echo "corepack $*" >> "$COMMAND_LOG"
+	return "$COREPACK_STATUS"
+}
+
 curl() {
 	local url= output=
 	while [ "$#" -gt 0 ]; do
@@ -77,6 +90,11 @@ curl() {
 	echo "curl $url" >> "$COMMAND_LOG"
 	[ "$CURL_FAIL" = false ] || return 23
 	case "$url" in
+		https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh)
+			printf '%s\n' 'echo "nvm-install $METHOD $PROFILE" >> "$COMMAND_LOG"' \
+				'[ "$NVM_INSTALL_STATUS" -eq 0 ] || exit "$NVM_INSTALL_STATUS"' \
+				'printf "%s\n" '\''echo "nvm-source $*" >> "$COMMAND_LOG"'\'' '\''nvm() { echo "nvm $*" >> "$COMMAND_LOG"; return "$NVM_STATUS"; }'\'' > "$NVM_DIR/nvm.sh"' > "$output"
+			;;
 		https://bun.com/install)
 			printf '%s\n' 'echo "bun-install $*" >> "$COMMAND_LOG"' \
 				'exit "$BUN_STATUS"' > "$output"
@@ -100,7 +118,16 @@ curl() {
 			echo '  "fixture": true'
 			echo '}'
 			;;
-		*/init.d/*.topic) cp "$ROOT/init.d/${url##*/}" "$output" ;;
+		*/init.d/*.topic)
+			if [[ "$url" == */rust.topic ]]; then
+				[ "$TOPIC_DOWNLOAD_FAIL" = false ] || return 23
+				if [ "$TOPIC_INVALID" = true ]; then
+					echo 'if' > "$output"
+					return 0
+				fi
+			fi
+			cp "$ROOT/init.d/${url##*/}" "$output"
+			;;
 		*/src/.zshenv) cp "$ROOT/src/.zshenv" "$output" ;;
 		*/src/_init.sh) return 23 ;;
 		*/init.sh)
@@ -113,7 +140,7 @@ curl() {
 		*) return 23 ;;
 	esac
 }
-export -f sudo python python3 curl
+export -f sudo python python3 npm corepack curl
 
 run() {
 	local expected="$1" status=0
@@ -130,14 +157,14 @@ run 0 --help
 run 0 install --help
 run 0 update --help
 run 0 --list
-[ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc\npodman\nsparky-extras\ndisplay-clients\nrust\nbun' ]
+[ "$OUTPUT" = $'git-config\ngolang\noh-my-tmux\noh-my-zsh\npython-uv\npython-tldr\nnanorc\npodman\nsparky-extras\ndisplay-clients\nrust\nbun\nnodejs' ]
 while IFS= read -r topic; do
 	[ -f "$ROOT/init.d/$topic.topic" ]
 	grep -q "'$topic:" "$ROOT/src/_init.sh"
 done <<< "$OUTPUT"
 shopt -s nullglob
 topic_files=("$ROOT"/init.d/*.topic)
-[ "${#topic_files[@]}" -eq 12 ]
+[ "${#topic_files[@]}" -eq 13 ]
 legacy_topic_files=("$ROOT"/init.d/*.sh)
 [ "${#legacy_topic_files[@]}" -eq 0 ]
 run 0 install git-config golang git-config python-uv --exclude python-uv --dry-run
@@ -156,7 +183,8 @@ run 0 --dry-run
 [[ "$OUTPUT" == *'Preview topic: oh-my-zsh'* ]]
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 1 ]
 run 0 install '*' --dry-run
-[ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 12 ]
+[ "$(echo "$OUTPUT" | grep -c 'Preview topic:')" -eq 13 ]
+[[ "$OUTPUT" == *'Preview topic: nodejs'*'nvm install 26'*'npm install -g corepack'*'corepack enable pnpm'* ]]
 run 0 install '*' --exclude '*' --dry-run
 [ "$OUTPUT" = '' ]
 run 1 install unknown --dry-run
@@ -168,15 +196,15 @@ run 0 install golang
 [[ "$OUTPUT" == *'Proceed? [y/N]'*'Cancelled.'* ]]
 [ ! -s "$COMMAND_LOG" ]
 run 0 update
-[[ "$OUTPUT" == *'Checking ParkSnoopy/debian-slim-zsh@main'*'Already up to date'*'Skipped '* ]]
+[[ "$OUTPUT" == *'Checking ParkSnoopy/debian-slim-zsh@main'*'Skipped '*'Already up to date'* ]]
 grep -qx 'curl https://api.github.com/repos/ParkSnoopy/debian-slim-zsh/commits/main' "$COMMAND_LOG"
 INIT_TARGET_SCRIPT="$CHECK_DIR/default-init.sh" UPDATE_HASH=3333333333333333333333333333333333333333 run 0 update
-grep -qx 'curl https://raw.githubusercontent.com/ParkSnoopy/debian-slim-zsh/main/init.sh' "$COMMAND_LOG"
+grep -qx 'curl https://raw.githubusercontent.com/ParkSnoopy/debian-slim-zsh/3333333333333333333333333333333333333333/init.sh' "$COMMAND_LOG"
 bash -n "$CHECK_DIR/default-init.sh"
 INIT_GITHUB_REPOSITORY=fixture/other INIT_GITHUB_BRANCH=release run 0 update
 grep -qx 'curl https://api.github.com/repos/fixture/other/commits/release' "$COMMAND_LOG"
 INIT_GITHUB_REPOSITORY=fixture/other INIT_GITHUB_BRANCH=release INIT_TARGET_SCRIPT="$CHECK_DIR/custom-init.sh" UPDATE_HASH=3333333333333333333333333333333333333333 run 0 update
-grep -qx 'curl https://raw.githubusercontent.com/fixture/other/release/init.sh' "$COMMAND_LOG"
+grep -qx 'curl https://raw.githubusercontent.com/fixture/other/3333333333333333333333333333333333333333/init.sh' "$COMMAND_LOG"
 : > "$COMMAND_LOG"
 
 run 0 install display-clients display-clients -y
@@ -280,6 +308,33 @@ if compgen -G '/etc/apt/sources.list.d/*.sources' >/dev/null; then
 	! grep -q '^sudo apt ' "$COMMAND_LOG"
 fi
 
+: > "$COMMAND_LOG"
+run 0 install nodejs nodejs golang -y
+[[ "$OUTPUT" == *'Topic complete: nodejs'*'Topic complete: golang'* ]]
+[ "$(grep -cx 'sudo apt update' "$COMMAND_LOG")" -eq 1 ]
+[ "$(grep -cx "nvm-install script $HOME/.zshrc" "$COMMAND_LOG")" -eq 1 ]
+grep -qx 'nvm-source --no-use' "$COMMAND_LOG"
+grep -qx 'nvm install 26' "$COMMAND_LOG"
+grep -qx 'nvm alias default 26' "$COMMAND_LOG"
+grep -qx 'npm install -g corepack' "$COMMAND_LOG"
+grep -qx 'corepack enable pnpm' "$COMMAND_LOG"
+NVM_DIR="$CHECK_DIR/custom-nvm" run 0 install nodejs -y
+[ -f "$CHECK_DIR/custom-nvm/nvm.sh" ]
+: > "$COMMAND_LOG"
+APT_FAIL=true run 1 install nodejs -y
+! grep -q '^curl ' "$COMMAND_LOG"
+CURL_FAIL=true run 1 install nodejs -y
+! grep -q '^nvm-install ' "$COMMAND_LOG"
+NVM_INSTALL_STATUS=37 run 1 install nodejs golang -y
+[[ "$OUTPUT" == *'Topic failed: nodejs'*'Topic complete: golang'*'Failed topics: nodejs'* ]]
+! grep -q '^nvm-source ' "$COMMAND_LOG"
+NVM_STATUS=37 run 1 install nodejs -y
+! grep -q '^npm ' "$COMMAND_LOG"
+NPM_STATUS=37 run 1 install nodejs -y
+! grep -q '^corepack ' "$COMMAND_LOG"
+COREPACK_STATUS=37 run 1 install nodejs -y
+run 0 install nodejs -y
+
 export INIT_BASE_URL=https://fixture.invalid/debian-slim-zsh
 export INIT_GITHUB_REPOSITORY=fixture/debian-slim-zsh
 run 0 install golang -y
@@ -299,6 +354,8 @@ run 0 install sparky-extras -y
 grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/sparky-extras.topic' "$COMMAND_LOG"
 run 0 install bun -y
 grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/bun.topic' "$COMMAND_LOG"
+run 0 install nodejs -y
+grep -qx 'curl https://fixture.invalid/debian-slim-zsh/init.d/nodejs.topic' "$COMMAND_LOG"
 CURL_FAIL=true run 1 install golang -y
 [[ "$OUTPUT" == *'Topic failed: golang'* ]]
 
@@ -335,8 +392,35 @@ OUTPUT="$(echo y | UPDATE_HASH=3333333333333333333333333333333333333333 INIT_TAR
 cmp "$CHECK_DIR/self-init.sh" <(sed 's/^CURRENT_COMMIT_HASH="[0-9a-f]*"/CURRENT_COMMIT_HASH="3333333"/' "$ROOT/init.sh")
 cmp "$ROOT/src/.zshenv" "$HOME/.zshenv"
 
+# Repair the coordinator-only result of a legacy update, without remote dispatch.
+mkdir -p "$CHECK_DIR/legacy/init.d"
+echo 'exit 99' > "$CHECK_DIR/legacy/init.d/golang.sh"
+cp "$ROOT/init.sh" "$CHECK_DIR/legacy/init.sh"
+OUTPUT="$(INIT_BASE_URL= INIT_TARGET_SCRIPT="$CHECK_DIR/legacy/init.sh" bash "$CHECK_DIR/legacy/init.sh" update </dev/null 2>&1)"
+[[ "$OUTPUT" == *'Already up to date'* ]]
+for topic_file in "$ROOT"/init.d/*.topic; do
+	cmp "$topic_file" "$CHECK_DIR/legacy/init.d/${topic_file##*/}"
+done
+: > "$COMMAND_LOG"
+OUTPUT="$(INIT_BASE_URL= bash "$CHECK_DIR/legacy/init.sh" install bun nodejs -y 2>&1)"
+[[ "$OUTPUT" == *'Topic complete: bun'*'Topic complete: nodejs'* ]]
+! grep -q '/init.d/' "$COMMAND_LOG"
+cp "$CHECK_DIR/legacy/init.sh" "$CHECK_DIR/legacy-before.sh"
+cp -r "$CHECK_DIR/legacy/init.d" "$CHECK_DIR/topics-before"
+for failure in TOPIC_DOWNLOAD_FAIL TOPIC_INVALID; do
+	status=0
+	OUTPUT="$(export "$failure=true"; INIT_TARGET_SCRIPT="$CHECK_DIR/legacy/init.sh" UPDATE_HASH=4444444444444444444444444444444444444444 bash "$CHECK_DIR/legacy/init.sh" update </dev/null 2>&1)" || status=$?
+	[ "$status" -ne 0 ]
+	[[ "$OUTPUT" != *'Already up to date'* ]]
+	cmp "$CHECK_DIR/legacy-before.sh" "$CHECK_DIR/legacy/init.sh"
+	diff -r "$CHECK_DIR/topics-before" "$CHECK_DIR/legacy/init.d"
+done
+rm "$CHECK_DIR/legacy/init.d/bun.topic"
+OUTPUT="$(INIT_BASE_URL= INIT_TARGET_SCRIPT="$CHECK_DIR/legacy/init.sh" bash "$CHECK_DIR/legacy/init.sh" update </dev/null 2>&1)"
+cmp "$ROOT/init.d/bun.topic" "$CHECK_DIR/legacy/init.d/bun.topic"
+
 CURL_FAIL=true
-for topic in nanorc oh-my-zsh sparky-extras rust bun; do
+for topic in nanorc oh-my-zsh sparky-extras rust bun nodejs; do
 	status=0
 	bash "$ROOT/init.d/$topic.topic" >/dev/null 2>&1 || status=$?
 	[ "$status" -eq 23 ]

@@ -85,7 +85,7 @@ These records do not track later user package installations.
 5. Each selected topic runs in a separate Bash process. Failed topics do not prevent later topics from running.
 6. The coordinator reports all failed topics and returns a nonzero status when any topic fails.
 
-Supported topics are `git-config`, `golang`, `oh-my-tmux`, `oh-my-zsh`, `python-uv`, `python-tldr`, `nanorc`, `podman`, `sparky-extras`, `display-clients`, `rust`, and `bun`.
+Supported topics are `git-config`, `golang`, `oh-my-tmux`, `oh-my-zsh`, `python-uv`, `python-tldr`, `nanorc`, `podman`, `sparky-extras`, `display-clients`, `rust`, `bun`, and `nodejs`.
 The default selection is `oh-my-zsh`.
 No topic requires another topic to run first. Each topic declares its own package dependencies.
 Keep the coordinator catalogue, previews, completion catalogue, topic files, and tests consistent.
@@ -101,6 +101,10 @@ Unavailable components in the complete profile fail the topic without falling ba
 
 The [bun topic](../init.d/bun.topic) installs `ca-certificates`, `curl`, and `unzip`, then stages Bun's official installer before running it as the current user.
 The installer uses Bun's default per-user location and shell integration, respecting an existing `BUN_INSTALL` override.
+The [nodejs topic](../init.d/nodejs.topic) installs `ca-certificates`, `curl`, and `xz-utils` before staging the nvm installer.
+It installs nvm through its script method, loads nvm, and installs Node.js 26 as the default version.
+It installs Corepack through that Node.js version's npm and enables pnpm without an interactive input producer.
+The nvm installer adds shell integration to `~/.zshrc` and respects an existing `NVM_DIR` override.
 The [sparky-extras topic](../init.d/sparky-extras.topic) enables only Sparky's `core` repository without installing a desktop or running a distribution upgrade.
 It checks the downloaded key's SHA-256, scopes trust through `Signed-By`, and pins the Sparky core release origin at priority `90`, keeping normal Debian candidates preferred.
 The Sparky topic refreshes only its added source with list cleanup disabled; this is the repository-addition exception to the coordinator's single global refresh.
@@ -112,19 +116,24 @@ The Containerfile copies the complete topic directory into the image.
 
 Remote downloads require an explicit `INIT_BASE_URL` and request `<base>/init.d/<name>.topic`.
 The coordinator downloads each complete topic before executing it and removes its temporary file afterward.
-Self-update defaults to `ParkSnoopy/debian-slim-zsh` on `main`, with raw downloads from the same repository and branch.
+Self-update defaults to `ParkSnoopy/debian-slim-zsh` on `main`.
+It pins raw downloads to the commit returned by that branch's commit API.
 `INIT_GITHUB_REPOSITORY` and `INIT_GITHUB_BRANCH` override those defaults.
 An explicit `INIT_BASE_URL` overrides the raw download location.
 The derived update URL applies only to self-update. It does not change local topic installation into remote execution.
-Self-update checks Bash syntax before replacing the coordinator and asks before replacing the user's shell environment.
-It stages the coordinator with the fetched commit hash and replaces `~/init.sh` through an EXIT trap after the update flow succeeds.
+Self-update stages the coordinator and every topic in its catalogue, checking each file's Bash syntax before installation.
+It asks before replacing the user's shell environment.
+It stamps the coordinator with the fetched commit hash and installs topics beside the target script in `init.d/`.
+The EXIT trap installs the topics before replacing `~/init.sh` after the update flow succeeds.
 The trap reports up-to-date status only after replacement succeeds and cleans staged files on success or failure.
-It does not replace the bundled topic directory.
-Remote topic downloads still require `INIT_BASE_URL` on subsequent calls.
+The image's system-owned bundle remains unchanged.
+Subsequent calls use the updated local topics without requiring `INIT_BASE_URL`.
+An update also repairs missing adjacent topics when the coordinator's commit hash is already current.
 
 The `.topic` rename changes the distribution contract.
-An older image with only `.sh` topics cannot acquire a matching local bundle through coordinator-only self-update.
-Rebuild the image or replace the coordinator and topic directory together. Legacy aliases are not provided.
+An older updater replaces only the coordinator on its first run.
+Run `~/init.sh update` again with the updated coordinator to acquire the matching topic bundle, including in images with only `.sh` topics.
+Legacy topic aliases are not provided.
 
 ## Ownership, devices, and persistent state
 
@@ -278,6 +287,7 @@ actionlint .github/workflows/deploy-image.yaml
 
 The installer suite uses controlled package and download fixtures in a temporary home.
 It checks the exact topic inventory, `.topic` paths, arbitrary order, exclusions, failures, updates, and download cleanup.
+Update checks cover missing-topic repair, local execution after replacement, and rejection of incomplete or invalid topic downloads.
 Podman checks redirect installation into the fixture directory and capture the generated wrapper's exec arguments with controlled identity and exit status.
 They cover repeated installation, package failure, root defaults, non-root passthrough, command aliases, quoting, output streams, and error propagation.
 It does not install real packages or contact upstream services.
@@ -294,6 +304,7 @@ It checks admin identity, sudo, inherited groups, runtime permissions, offline s
 The TTY checks require writable terminal stdin and actual pane output from the documented `tmux -2u` command.
 It installs `hello` and checks package, configuration, and home persistence across restart of the same container.
 It also installs the Podman topic and checks wrapper ownership, sudo command lookup, and root/non-root version commands before and after restart.
+It installs Node.js through nvm and checks Node.js, npm, and pnpm from an interactive zsh before and after restart.
 Those checks do not establish successful nested container creation.
 Lifecycle installation and restart checks print their output and shell trace to expose failures before cleanup removes the containers.
 Its noninteractive SIGTERM case explicitly enables CMD signal forwarding.

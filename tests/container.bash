@@ -87,7 +87,7 @@ grep -q TMUX_OUTPUT_OK "$CHECK_DIR/tmux"
 			sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends hello
 			~/init.sh install podman -y
 			! grep -q "http://" /etc/apt/sources.list.d/debian.sources
-			~/init.sh install bun sparky-extras -y
+			~/init.sh install bun nodejs sparky-extras -y
 			"$HOME/.bun/bin/bun" --version
 			grep -qx "Suites: core" /etc/apt/sources.list.d/sparky-extras.sources
 			! grep -Eq "tiamat|testing" /etc/apt/sources.list.d/sparky-extras.sources /etc/apt/preferences.d/sparky-extras
@@ -95,6 +95,7 @@ grep -q TMUX_OUTPUT_OK "$CHECK_DIR/tmux"
 			echo preserved | sudo -n tee /etc/workspace-lifecycle-test
 			echo INSTALL_OK
 		fi
+		zsh -eic '\''[[ "$(node --version)" == v26.* ]]; node --version; npm --version; COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm --version'\''
 		[ "$(stat -c %u:%g:%a /usr/local/bin/podman)" = 0:0:755 ]
 		[ "$(sudo -n bash -c "command -v podman")" = /usr/local/bin/podman ]
 		[ "$(stat -c %u:%g:%a /usr/local/bin/podman-compose)" = 0:0:755 ]

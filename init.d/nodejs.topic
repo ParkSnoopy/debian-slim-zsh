@@ -1,0 +1,17 @@
+#!/bin/env bash
+set -euo pipefail
+
+sudo apt install -y ca-certificates curl xz-utils
+
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+mkdir -p "$NVM_DIR"
+touch "$HOME/.zshrc"
+INSTALLER_PATH="$(mktemp "${TMPDIR:-/tmp}/nvm-install.XXXXXX")"
+trap 'rm -f "$INSTALLER_PATH"' EXIT
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh -o "$INSTALLER_PATH"
+PROFILE="$HOME/.zshrc" METHOD=script bash "$INSTALLER_PATH"
+. "$NVM_DIR/nvm.sh" --no-use
+nvm install 26
+nvm alias default 26
+npm install -g corepack
+corepack enable pnpm
