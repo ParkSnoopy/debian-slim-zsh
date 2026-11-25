@@ -2,3 +2,4 @@
 set -euo pipefail
 
 sudo apt install -y golang
+go telemetry off

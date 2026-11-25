@@ -297,6 +297,7 @@ preview_topic() {
 			;;
 		golang)
 			echo 'sudo apt install -y golang'
+			echo 'go telemetry off'
 			;;
 		rust)
 			echo 'sudo apt install -y ca-certificates curl'
@@ -322,7 +323,8 @@ preview_topic() {
 		bun)
 			echo 'sudo apt install -y ca-certificates curl unzip'
 			echo "curl --proto '=https' --tlsv1.2 -fsSL https://bun.com/install -o <tmp-installer>"
-			echo 'bash <tmp-installer>'
+			echo 'DO_NOT_TRACK=1 bash <tmp-installer>'
+			echo 'Set DO_NOT_TRACK=1 in ${ZDOTDIR:-$HOME}/.zshenv'
 			;;
 		nodejs)
 			echo 'sudo apt install -y ca-certificates curl xz-utils'
@@ -334,8 +336,10 @@ preview_topic() {
 			echo '. "$NVM_DIR/nvm.sh" --no-use'
 			echo 'nvm install 26'
 			echo 'nvm alias default 26'
+			echo "npm config set --location=user 'user-agent=npm/{npm-version}'"
 			echo 'npm install -g corepack'
 			echo 'corepack enable pnpm'
+			echo 'COREPACK_ENABLE_PROJECT_SPEC=0 COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm config set --global userAgent pnpm'
 			;;
 		sparky-extras)
 			echo 'sudo apt install -y ca-certificates curl'

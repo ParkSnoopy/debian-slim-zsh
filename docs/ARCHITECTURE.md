@@ -135,6 +135,16 @@ An older updater replaces only the coordinator on its first run.
 Run `~/init.sh update` again with the updated coordinator to acquire the matching topic bundle, including in images with only `.sh` topics.
 Legacy topic aliases are not provided.
 
+### Telemetry and request metadata
+
+- The image exports `DO_NOT_TRACK=1` for tools that honor it. The Bun topic sets it during installation and adds it to zsh startup without replacing the existing file. [Bun uses it to disable crash uploads and telemetry](https://bun.com/docs/runtime/environment-variables).
+- The Go topic runs [`go telemetry off`](https://go.dev/doc/telemetry) as the current user. This disables local collection and uploads.
+- The Python topics leave version checks unchanged. Pip and uv registry requests [include platform and tool metadata](https://github.com/astral-sh/uv/issues/8474) without a known supported opt-out.
+- The Node.js topic configures shorter [npm](https://docs.npmjs.com/cli/v11/using-npm/config#user-agent) and [pnpm](https://pnpm.io/settings/network#useragent) User-Agent headers. Registry operators still receive the requests. The topic does not change security audit settings.
+- No further supported opt-out was identified for `git-config`, `oh-my-zsh`, `oh-my-tmux`, `nanorc`, `podman`, `sparky-extras`, `display-clients`, or `rust`. The Podman topic does not install Podman Desktop.
+
+Package downloads, version checks, and security checks remain unchanged.
+
 ## Ownership, devices, and persistent state
 
 The shell account is fixed at UID/GID `1000:1000`.

@@ -11,11 +11,12 @@ export CURL_FAIL=false APT_FAIL=false UPDATE_INVALID=false UPDATE_HASH=b1ec88e
 export SPARKY_KEY_INVALID=false
 export SPARKY_REFRESH_FAIL=false
 export HTTPS_FAIL=false BUN_STATUS=0
+export GO_STATUS=0 PNPM_STATUS=0
 export RUSTUP_STATUS=0
 export NVM_INSTALL_STATUS=0 NVM_STATUS=0 NPM_STATUS=0 COREPACK_STATUS=0
 export TOPIC_DOWNLOAD_FAIL=false TOPIC_INVALID=false
 export INIT_BASE_URL= INIT_GITHUB_REPOSITORY=
-unset INIT_GITHUB_BRANCH INIT_TARGET_SCRIPT NVM_DIR
+unset INIT_GITHUB_BRANCH INIT_TARGET_SCRIPT NVM_DIR ZDOTDIR DO_NOT_TRACK
 mkdir -p "$HOME" "$TMPDIR"
 touch "$COMMAND_LOG"
 for source_file in /etc/apt/sources.list.d/*.source /etc/apt/sources.list.d/*.sources; do
@@ -68,14 +69,26 @@ python3() {
 	echo "python3 $*" >> "$COMMAND_LOG"
 }
 
+go() {
+	echo "go $*" >> "$COMMAND_LOG"
+	return "$GO_STATUS"
+}
+
 npm() {
 	echo "npm $*" >> "$COMMAND_LOG"
+	[ "$1" != config ] || return 0
 	return "$NPM_STATUS"
 }
 
 corepack() {
 	echo "corepack $*" >> "$COMMAND_LOG"
 	return "$COREPACK_STATUS"
+}
+
+pnpm() {
+	echo "pnpm $*" >> "$COMMAND_LOG"
+	[ "$COREPACK_ENABLE_PROJECT_SPEC" = 0 ] && [ "$COREPACK_ENABLE_DOWNLOAD_PROMPT" = 0 ] || return 64
+	return "$PNPM_STATUS"
 }
 
 curl() {
@@ -97,6 +110,7 @@ curl() {
 			;;
 		https://bun.com/install)
 			printf '%s\n' 'echo "bun-install $*" >> "$COMMAND_LOG"' \
+				'[ "${DO_NOT_TRACK:-}" = 1 ] || exit 64' \
 				'exit "$BUN_STATUS"' > "$output"
 			;;
 		https://sh.rustup.rs)
@@ -140,7 +154,7 @@ curl() {
 		*) return 23 ;;
 	esac
 }
-export -f sudo python python3 npm corepack curl
+export -f sudo python python3 go npm corepack pnpm curl
 
 run() {
 	local expected="$1" status=0
@@ -173,7 +187,8 @@ run 0 install git-config golang git-config python-uv --exclude python-uv --dry-r
 [ "$(echo "$OUTPUT" | grep -c 'Preview topic: git-config')" -eq 1 ]
 run 0 install bun rust display-clients sparky-extras podman nanorc python-tldr python-uv oh-my-zsh oh-my-tmux golang git-config --dry-run
 [[ "$OUTPUT" == *'Preview topic: bun'*'Preview topic: rust'*'Preview topic: display-clients'*'Preview topic: sparky-extras'*'Preview topic: podman'*'Preview topic: nanorc'*'Preview topic: python-tldr'*'Preview topic: python-uv'*'Preview topic: oh-my-zsh'*'Preview topic: oh-my-tmux'*'Preview topic: golang'*'Preview topic: git-config'* ]]
-[[ "$OUTPUT" == *'Preview APT source HTTPS rewrite'*'sudo apt update'*'https://bun.com/install'*'bash <tmp-installer>'* ]]
+[[ "$OUTPUT" == *'Preview APT source HTTPS rewrite'*'sudo apt update'*'https://bun.com/install'*'DO_NOT_TRACK=1 bash <tmp-installer>'* ]]
+[[ "$OUTPUT" == *'Preview topic: golang'*'go telemetry off'* ]]
 [[ "$OUTPUT" == *'--default-toolchain stable --profile complete --target x86_64-unknown-linux-gnu --no-modify-path'* ]]
 [[ "$OUTPUT" == *'sudo apt install -y --no-install-recommends libwayland-client0 libx11-6'* ]]
 [[ "$OUTPUT" == *'core priority 90;'*'Dir::Etc::sourceparts=""'* ]]
@@ -221,14 +236,19 @@ APT_FAIL=true run 1 install display-clients -y
 
 run 0 install golang -y
 [[ "$OUTPUT" == *'Topic complete: golang'* ]]
+grep -qx 'go telemetry off' "$COMMAND_LOG"
 OUTPUT="$(echo y | bash "$ROOT/init.sh" install golang 2>&1)"
 [[ "$OUTPUT" == *'Topic complete: golang'* ]]
 APT_FAIL=true run 1 install golang python-uv -y
+[[ "$OUTPUT" == *'Topic failed: golang'*'Topic complete: python-uv'*'Failed topics: golang'* ]]
+GO_STATUS=37 run 1 install golang python-uv -y
 [[ "$OUTPUT" == *'Topic failed: golang'*'Topic complete: python-uv'*'Failed topics: golang'* ]]
 run 0 install python-tldr python-uv -y
 [[ "$OUTPUT" == *'Topic complete: python-tldr'*'Topic complete: python-uv'* ]]
 run 0 install python-uv python-tldr -y
 [[ "$OUTPUT" == *'Topic complete: python-uv'*'Topic complete: python-tldr'* ]]
+grep -qx 'python -m pip install --break-system-packages uv ruff' "$COMMAND_LOG"
+grep -qx 'python3 -m pip install --break-system-packages tldr' "$COMMAND_LOG"
 ! grep -q '^curl ' "$COMMAND_LOG"
 
 printf '%s\n' 'fixture shell configuration' > "$HOME/.profile"
@@ -290,10 +310,13 @@ SPARKY_REFRESH_FAIL=true run 1 install sparky-extras golang -y
 [[ "$OUTPUT" == *'Topic failed: sparky-extras'*'Topic complete: golang'*'Failed topics: sparky-extras'* ]]
 
 : > "$COMMAND_LOG"
+echo 'export EXAMPLE=preserved' > "$HOME/.zshenv"
 run 0 install bun bun golang -y
 [[ "$OUTPUT" == *'Topic complete: bun'*'Topic complete: golang'* ]]
 [ "$(grep -cx 'sudo apt update' "$COMMAND_LOG")" -eq 1 ]
 [ "$(grep -c '^bun-install ' "$COMMAND_LOG")" -eq 1 ]
+cmp "$HOME/.zshenv" <(printf '%s\n' 'export EXAMPLE=preserved' '' 'export DO_NOT_TRACK=1')
+cp "$HOME/.zshenv" "$CHECK_DIR/bun-zshenv"
 : > "$COMMAND_LOG"
 APT_FAIL=true run 1 install bun -y
 ! grep -q '^curl ' "$COMMAND_LOG"
@@ -302,6 +325,7 @@ CURL_FAIL=true run 1 install bun -y
 BUN_STATUS=37 run 1 install bun golang -y
 [[ "$OUTPUT" == *'Topic failed: bun'*'Topic complete: golang'*'Failed topics: bun'* ]]
 run 0 install bun -y
+cmp "$HOME/.zshenv" "$CHECK_DIR/bun-zshenv"
 : > "$COMMAND_LOG"
 if compgen -G '/etc/apt/sources.list.d/*.sources' >/dev/null; then
 	HTTPS_FAIL=true run 7 install bun -y
@@ -316,8 +340,10 @@ run 0 install nodejs nodejs golang -y
 grep -qx 'nvm-source --no-use' "$COMMAND_LOG"
 grep -qx 'nvm install 26' "$COMMAND_LOG"
 grep -qx 'nvm alias default 26' "$COMMAND_LOG"
+grep -qxF 'npm config set --location=user user-agent=npm/{npm-version}' "$COMMAND_LOG"
 grep -qx 'npm install -g corepack' "$COMMAND_LOG"
 grep -qx 'corepack enable pnpm' "$COMMAND_LOG"
+grep -qx 'pnpm config set --global userAgent pnpm' "$COMMAND_LOG"
 NVM_DIR="$CHECK_DIR/custom-nvm" run 0 install nodejs -y
 [ -f "$CHECK_DIR/custom-nvm/nvm.sh" ]
 : > "$COMMAND_LOG"
@@ -333,6 +359,8 @@ NVM_STATUS=37 run 1 install nodejs -y
 NPM_STATUS=37 run 1 install nodejs -y
 ! grep -q '^corepack ' "$COMMAND_LOG"
 COREPACK_STATUS=37 run 1 install nodejs -y
+[ "$(grep -c '^pnpm ' "$COMMAND_LOG" || :)" -eq 0 ]
+PNPM_STATUS=37 run 1 install nodejs -y
 run 0 install nodejs -y
 
 export INIT_BASE_URL=https://fixture.invalid/debian-slim-zsh
@@ -361,7 +389,7 @@ CURL_FAIL=true run 1 install golang -y
 
 run 0 update
 [[ "$OUTPUT" == *'Already up to date'*'Update '*'.zshenv? [y/N]'*'Skipped '* ]]
-[ ! -e "$HOME/.zshenv" ]
+cmp "$HOME/.zshenv" "$CHECK_DIR/bun-zshenv"
 OUTPUT="$(echo y | bash "$ROOT/init.sh" update 2>&1)"
 cmp "$ROOT/src/.zshenv" "$HOME/.zshenv"
 UPDATE_HASH=1111111111111111111111111111111111111111 run 0 update

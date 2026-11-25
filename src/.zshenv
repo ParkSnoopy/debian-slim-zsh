@@ -30,6 +30,7 @@
 # ====================
 
 # Environment
+export DO_NOT_TRACK=1
 export TZ="${TZ:-Asia/Seoul}"
 export LANG="${LANG:-en_US.UTF-8}"
 export TAR_OPTIONS="--no-same-owner"

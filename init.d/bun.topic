@@ -6,4 +6,8 @@ sudo apt install -y ca-certificates curl unzip
 INSTALLER_PATH="$(mktemp "${TMPDIR:-/tmp}/bun-install.XXXXXX")"
 trap 'rm -f "$INSTALLER_PATH"' EXIT
 curl --proto '=https' --tlsv1.2 -fsSL https://bun.com/install -o "$INSTALLER_PATH"
-bash "$INSTALLER_PATH"
+DO_NOT_TRACK=1 bash "$INSTALLER_PATH"
+
+if ! grep -qxF 'export DO_NOT_TRACK=1' "${ZDOTDIR:-$HOME}/.zshenv" 2>/dev/null; then
+	printf '\n%s\n' 'export DO_NOT_TRACK=1' >> "${ZDOTDIR:-$HOME}/.zshenv"
+fi

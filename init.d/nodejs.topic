@@ -13,5 +13,7 @@ PROFILE="$HOME/.zshrc" METHOD=script bash "$INSTALLER_PATH"
 . "$NVM_DIR/nvm.sh" --no-use
 nvm install 26
 nvm alias default 26
+npm config set --location=user 'user-agent=npm/{npm-version}'
 npm install -g corepack
 corepack enable pnpm
+COREPACK_ENABLE_PROJECT_SPEC=0 COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm config set --global userAgent pnpm
